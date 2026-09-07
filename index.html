@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timeline</title>
+<script>
+  try{
+    var savedTheme = localStorage.getItem('csvTimelineTheme');
+    if(savedTheme === 'day') document.documentElement.setAttribute('data-theme', 'day');
+    document.documentElement.style.colorScheme = savedTheme === 'day' ? 'light' : 'dark';
+  } catch(e){}
+</script>
+<style>
+  :root{
+    --bg:#0f1115;
+    --grid:rgba(170,190,210,0.20);
+    --grid-strong:rgba(190,205,220,0.45);
+    --text:#f2f4f6;
+    --text-dim:#9aa4b0;
+    --text-mid:#c7d0d9;
+    --lane-line:rgba(170,190,210,0.22);
+    --day-line:rgba(190,205,220,0.34);
+    --panel:#181b21;
+    --panel-border:rgba(150,168,190,0.16);
+    --now-line:#ff4d4d;
+    --glass-bg:rgba(20,22,28,0.72);
+    --fab-bg:rgba(24,27,33,0.72);
+    --glass-border:rgba(255,255,255,0.09);
+    --chip-bg:rgba(255,255,255,0.055);
+    --weekend-tint:rgba(220,225,232,0.10);
+    --del-hover-bg:rgba(255,107,107,0.16);
+    --del-hover-text:#ff8787;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  :root[data-theme="day"]{
+    --bg:#f4ecdb;
+    --grid:rgba(120,110,95,0.28);
+    --grid-strong:rgba(120,110,95,0.55);
+    --text:#2a2118;
+    --text-dim:#6b5f4f;
+    --text-mid:#4a4030;
+    --lane-line:rgba(120,110,95,0.30);
+    --day-line:rgba(120,110,95,0.45);
+    --panel:#fbf6ea;
+    --panel-border:rgba(60,45,25,0.18);
+    --now-line:#ff4d4d;
+    --glass-bg:rgba(244,236,219,0.78);
+    --fab-bg:rgba(251,246,234,0.88);
+    --glass-border:rgba(60,45,25,0.14);
+    --chip-bg:rgba(60,45,25,0.045);
+    --weekend-tint:rgba(60,45,25,0.055);
+    --del-hover-bg:rgba(214,52,52,0.14);
+    --del-hover-text:#b3261e;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    overflow:hidden;
+    transition:background .2s ease, color .2s ease;
+  }
+  #app{
+    position:relative; width:100vw; height:100vh; overflow:hidden;
+  }
+
+  /* ---- page header (file chips) ---- */
+  #header{
+    position:fixed; top:0; left:0; right:0; height:50px; z-index:60;
+    display:flex; align-items:center; gap:12px; padding:0 16px;
+    background:var(--glass-bg);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--panel-border);
+  }
+  #fileChips{
+    display:flex; align-items:center; gap:8px;
+    overflow-x:auto; overflow-y:hidden; flex:1 1 auto; min-width:0;
+  }
+  #fileChips::-webkit-scrollbar{ height:0; }
+  #rangeControls{
+    display:none; align-items:center; gap:6px; flex-shrink:0;
+  }
+  #rangeControls input{
+    background:var(--chip-bg); border:1px solid var(--glass-border);
+    border-radius:6px; padding:5px 7px; color:var(--text); font-family:var(--mono);
+    font-size:11.5px;
+  }
+  #rangeControls .arrow{ color:var(--text-dim); font-size:12px; }
+  .file-chip{
+    display:flex; align-items:center; gap:2px;
+    background:var(--chip-bg); border:1px solid var(--glass-border);
+    border-radius:20px; padding:6px 6px 6px 14px; flex-shrink:0;
+    font-family:var(--sans); font-size:13px; font-weight:600; color:var(--text);
+    white-space:nowrap;
+  }
+  .file-chip .color-swatch{
+    position:relative; width:14px; height:14px; border-radius:50%;
+    margin-left:6px; flex-shrink:0; cursor:pointer;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+  }
+  .file-chip .color-swatch input[type="color"]{
+    position:absolute; inset:0; opacity:0; cursor:pointer; border:none; padding:0;
+  }
+  .file-chip .del{
+    display:flex; align-items:center; justify-content:center;
+    width:20px; height:20px; margin-left:4px; border-radius:50%;
+    color:var(--text-dim); cursor:pointer; background:transparent; border:none;
+    transition:background .15s ease, color .15s ease;
+  }
+  .file-chip .del:hover{ background:var(--del-hover-bg); color:var(--del-hover-text); }
+  .file-chip .del svg{ width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.2; }
+
+  .file-chip.pending{ opacity:0.65; }
+  .file-chip .spinner{
+    width:13px; height:13px; margin-left:2px; flex-shrink:0;
+    border:2px solid rgba(128,128,128,0.35); border-top-color:var(--text);
+    border-radius:50%; animation:chip-spin .7s linear infinite;
+  }
+  @keyframes chip-spin{ to{ transform:rotate(360deg); } }
+  .file-chip.empty{ box-shadow: inset 0 0 0 1px rgba(255,183,3,0.55); }
+  .file-chip .warn-dot{
+    width:6px; height:6px; border-radius:50%; background:#ffb703;
+    margin-left:3px; flex-shrink:0;
+  }
+  #fab{
+    position:fixed; right:18px; bottom:18px; z-index:50;
+    display:flex; flex-direction:column; gap:10px; align-items:flex-end;
+  }
+  .fab-btn{
+    width:44px; height:44px; border-radius:50%;
+    background:var(--fab-bg); border:1px solid var(--glass-border);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    color:var(--text); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    transition:transform .15s ease, background .15s ease, filter .15s ease;
+  }
+  .fab-btn:hover{ filter:brightness(1.15); transform:translateY(-1px); }
+  .fab-btn.active{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
+  .fab-btn svg{ width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  #fileInput{ display:none; }
+
+  /* ---- empty state ---- */
+  #empty{
+    position:absolute; top:50px; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  #empty svg{
+    width:64px; height:64px; stroke:var(--text-dim); fill:none; stroke-width:1.3;
+    opacity:0.55; transition:opacity .15s ease, stroke .15s ease, transform .15s ease;
+  }
+  #empty:hover svg{ opacity:0.9; stroke:var(--text); transform:translateY(-2px); }
+  #app.dragover #empty{ background:rgba(150,168,190,0.06); }
+  #app.dragover #empty svg{ opacity:1; stroke:var(--text); }
+
+  /* ---- scroll viewport ---- */
+  #viewport{
+    position:absolute; top:50px; left:0; right:0; bottom:0; overflow:auto;
+  }
+  #timeline{
+    position:relative;
+  }
+  #timeline.horizontal{
+    display:flex; flex-direction:column;
+  }
+  #timeline.vertical{
+    display:flex; flex-direction:row;
+  }
+
+  .lane.file-start{ border-top-width:2px; border-top-color:var(--grid-strong); }
+
+  .lane{
+    position:relative;
+    border-color:var(--lane-line);
+  }
+  .horizontal .lane{
+    width:100%;
+    border-top:1px solid var(--lane-line);
+  }
+  .vertical .lane{
+    height:100%;
+    border-left:1px solid var(--lane-line);
+  }
+
+  .lane-tag{
+    position:absolute;
+    font-family:var(--mono); font-size:10px; font-weight:600; color:#e8ecf2;
+    letter-spacing:.03em; pointer-events:none;
+    background:rgba(10,10,16,0.5); padding:1px 5px; border-radius:3px;
+    white-space:nowrap;
+  }
+  .horizontal .lane-tag{ left:6px; top:3px; }
+  .vertical .lane-tag{
+    top:6px; left:4px;
+    writing-mode: vertical-rl;
+  }
+
+  .event{
+    position:absolute;
+    border-radius:4px;
+    cursor:pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+    transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  }
+  .event:hover{
+    transform:translateY(-1px);
+    filter:brightness(1.08);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25), 0 4px 10px rgba(0,0,0,0.35);
+  }
+  .event .cap{
+    position:absolute; background:rgba(255,255,255,0.85);
+  }
+  .horizontal .event .cap{ top:0; bottom:0; width:2px; }
+  .horizontal .event .cap.s{ left:0; }
+  .horizontal .event .cap.e{ right:0; }
+  .vertical .event .cap{ left:0; right:0; height:2px; }
+  .vertical .event .cap.s{ top:0; }
+  .vertical .event .cap.e{ bottom:0; }
+
+  .event-label{
+    position:absolute; inset:0;
+    display:flex; align-items:center;
+    padding:0 6px; pointer-events:none;
+  }
+  .event-label span{
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; word-break:break-word;
+    font-size:11px; color:#0b0c0f; font-weight:600; line-height:1.28;
+  }
+  .vertical .event-label{
+    writing-mode: vertical-rl;
+    padding:6px 0;
+    align-items:flex-start;
+    justify-content:flex-start;
+  }
+
+  /* ---- grid ticks ---- */
+  .tick-line{ position:absolute; background:var(--grid); pointer-events:none; }
+  .horizontal .tick-line{ width:1px; }
+  .vertical .tick-line{ height:1px; }
+
+  .day-line{ position:absolute; background:var(--day-line); pointer-events:none; }
+  .horizontal .day-line{ width:1px; }
+  .vertical .day-line{ height:1px; }
+
+  .weekend-band{ position:absolute; background:var(--weekend-tint); pointer-events:none; }
+
+  /* ---- calendar view ---- */
+  #timeline.calendar{ display:block; width:100% !important; height:auto !important; }
+  .cal-dow-header{
+    position:sticky; top:0; z-index:30; display:flex;
+    background:var(--bg); border-bottom:1px solid var(--grid-strong);
+    height:26px;
+  }
+  .cal-dow-header div{
+    flex:1 1 0; padding:6px 8px; box-sizing:border-box;
+    font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-mid);
+  }
+  .cal-week{ position:relative; border-top:1px solid var(--lane-line); }
+  .cal-daycell{
+    position:absolute; top:0; bottom:0;
+    border-left:1px solid var(--lane-line); box-sizing:border-box;
+  }
+  .cal-daycell:first-child{ border-left:none; }
+  .cal-daycell.weekend{ background:var(--weekend-tint); }
+  .cal-daycell.today{ box-shadow: inset 0 0 0 1.5px var(--text-mid); }
+  .cal-daynum{
+    position:absolute; top:2px; right:5px; font-family:var(--mono);
+    font-size:10px; font-weight:600; color:var(--text-mid); pointer-events:none;
+  }
+  .cal-month-label{
+    position:absolute; top:2px; left:5px; font-family:var(--mono);
+    font-size:10px; font-weight:700; color:var(--text); pointer-events:none;
+    white-space:nowrap;
+  }
+  .cal-event{
+    position:absolute; border-radius:4px; cursor:pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+    transition:transform .12s ease, filter .12s ease, box-shadow .12s ease;
+  }
+  .cal-event:hover{ transform:translateY(-1px); filter:brightness(1.08); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25), 0 4px 10px rgba(0,0,0,0.35); }
+  .cal-event-label{
+    position:absolute; inset:0; display:flex; align-items:center;
+    padding:0 6px; font-size:10.5px; font-weight:600;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  /* ---- time axis (sticky) ---- */
+  .axis{
+    position:sticky; z-index:30; background:var(--bg);
+  }
+  .horizontal .axis{ top:0; left:0; border-bottom:1px solid var(--grid-strong); }
+  .vertical .axis{ top:0; left:0; border-right:1px solid var(--grid-strong); }
+  .axis-tick{ position:absolute; background:var(--grid-strong); }
+  .horizontal .axis-tick{ bottom:0; width:1px; height:7px; }
+  .vertical .axis-tick{ right:0; height:1px; width:7px; }
+  .axis-label{
+    position:absolute; font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-mid);
+    white-space:nowrap; pointer-events:none;
+  }
+  .horizontal .axis-label{ bottom:8px; transform:translateX(3px); }
+  .vertical .axis-label{ right:9px; transform:translateY(-8px); }
+
+  .now-line{ position:absolute; background:var(--now-line); opacity:0.5; pointer-events:none; }
+  .horizontal .now-line{ top:0; bottom:0; width:1px; }
+  .vertical .now-line{ left:0; right:0; height:1px; }
+
+  /* ---- tooltip ---- */
+  #tooltip{
+    position:fixed; z-index:100; max-width:320px;
+    background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:6px; padding:10px 12px; overflow:hidden;
+    font-size:12px; line-height:1.55; color:var(--text);
+    box-shadow:0 8px 24px rgba(0,0,0,0.45);
+    pointer-events:none; opacity:0; transform:translateY(4px);
+    transition:opacity .12s ease, transform .12s ease;
+  }
+  #tooltip.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+  #tooltip .t-title{
+    font-weight:700; font-size:12.5px;
+    margin:-10px -12px 8px -12px;
+    padding:8px 12px;
+    border-radius:6px 6px 0 0;
+  }
+  #tooltip .t-row{ display:flex; gap:6px; }
+  #tooltip .t-row .k{ color:var(--text-mid); font-family:var(--mono); font-size:10.5px; min-width:14px; }
+  #tooltip a{ color:#7ecbff; text-decoration:none; }
+  #tooltip a:hover{ text-decoration:underline; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div id="fileChips"></div>
+    <div id="rangeControls">
+      <input type="datetime-local" id="rangeStart" title="Début de la fenêtre affichée">
+      <span class="arrow">→</span>
+      <input type="datetime-local" id="rangeEnd" title="Fin de la fenêtre affichée">
+    </div>
+  </div>
+  <div id="viewport">
+    <div id="timeline" class="horizontal"></div>
+  </div>
+  <div id="empty" title="Importer un ou plusieurs CSV / .ics">
+    <svg viewBox="0 0 24 24"><path d="M12 4v11M7 9l5-5 5 5M4 20h16"/></svg>
+  </div>
+
+  <div id="fab">
+    <div class="fab-btn" id="resetBtn" title="Tout effacer (y compris la sauvegarde locale)" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
+    </div>
+    <div class="fab-btn" id="icsBtn" title="Exporter en .ics (Google Calendar, Outlook)" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 11"/></svg>
+    </div>
+    <div class="fab-btn" id="compactDaysBtn" title="Compacter les jours sans événement" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M9 14h1M14 14h1M9 18h1M14 18h1"/></svg>
+    </div>
+    <div class="fab-btn" id="compactNightsBtn" title="Compacter les nuits" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>
+    </div>
+    <div class="fab-btn" id="viewModeBtn" title="Basculer en vue calendrier" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4M8 14h2M14 14h2M8 18h2M14 18h2"/></svg>
+    </div>
+    <div class="fab-btn" id="fitViewBtn" title="Réajuster sur toute la durée" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>
+    </div>
+    <div class="fab-btn" id="zoomOutBtn" title="Zoom arrière" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M7 10h6"/></svg>
+    </div>
+    <div class="fab-btn" id="zoomInBtn" title="Zoom avant" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M10 7v6M7 10h6"/></svg>
+    </div>
+    <div class="fab-btn" id="addBtn" title="Ajouter un ou plusieurs CSV / .ics">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="fab-btn" id="themeBtn" title="Passer en mode jour">
+      <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".csv,.ics,text/csv,text/calendar" multiple>
+</div>
+<div id="tooltip"></div>
+
+<script>
+(function(){
+
+  var allEvents = [];
+  var categoryColors = {};
+  var pinnedTooltip = false;
+  var zoomLevel = 1;
+  var compactNights = false;
+  var viewMode = 'timeline'; // 'timeline' | 'calendar'
+  var calendarWeeks = []; // filled by renderCalendarView(): {weekStart, weekEnd, top, height}
+  var compactEmptyDays = false;
+  var loadedFiles = []; // { index, name } — name has the .csv extension already stripped
+  var fileCounter = 0;
+  var STORAGE_KEY = 'csvTimelineData_v1';
+  var fileColors = {}; // fileIndex -> hex, manually chosen per-file color override
+  var DEFAULT_TITLE = document.title;
+
+  var PALETTE = [
+    '#ff5d5d','#ffb703','#8ac926','#06d6a0','#219ebc','#9b5de5',
+    '#ef476f','#f77f00','#00b4d8','#e63946','#2dc653','#b298dc',
+    '#f4a261','#4cc9f0','#c9184a','#52b788','#fca311','#3a86ff'
+  ];
+
+  // Categories whose meaning suggests an intuitive color. Blue shades are
+  // reserved exclusively for transport sub-types (one shade per mode), and
+  // green is reserved for nature-related activities (hiking included).
+  // Matched by substring against the normalized (accent/case/space-stripped)
+  // category name; first match wins, most specific entries listed first.
+  // Anything unmatched falls back to the vivid PALETTE, avoiding collisions.
+  var SEMANTIC_COLORS = [
+    { color:'#2e1a4d', words:['nuit','nocturne','dodo','coucher','sommeil'] },
+    { color:'#c77dff', words:['hebergement','hotel','logement','airbnb','gite','camping','chambre','auberge','residence'] },
+
+    // --- transport: blue family, one shade per mode ---
+    { color:'#3a86ff', words:['avion','vol','aeroport'] },
+    { color:'#219ebc', words:['train','gare'] },
+    { color:'#0077b6', words:['voiture','route','roadtrip','conduite'] },
+    { color:'#48bfe3', words:['autocar','bus'] },
+    { color:'#5390d9', words:['taxi','vtc','uber'] },
+    { color:'#1e6091', words:['bateau','ferry','croisiere'] },
+    { color:'#00b4d8', words:['metro','tram','navette'] },
+    { color:'#3a86ff', words:['transport','trajet'] },
+
+    // --- nature activities: green, hiking included ---
+    { color:'#2dc653', words:['rando','randonnee','trek','nature','montagne','foret','parc','plage','velo','kayak','ski','escalade'] },
+
+    { color:'#ff7043', words:['repas','restaurant','dejeuner','diner','brunch','cuisine','gastronomie','snack'] },
+    { color:'#ffb703', words:['activite','visite','musee','tourisme','decouverte','balade','loisir','sport','culture','excursion'] },
+    { color:'#ffd60a', words:['travail','reunion','bureau','conference','rdv','rendezvous','meeting','professionnel','call'] },
+    { color:'#ef476f', words:['sante','medical','medecin','hopital','pharmacie','urgence'] },
+    { color:'#f4a261', words:['finance','paiement','facture','banque','budget','impot'] },
+    { color:'#c9184a', words:['achat','shopping','magasin','boutique'] },
+    { color:'#bc6c25', words:['administratif','formalite','visa','douane','papier','document'] }
+  ];
+
+  function normCategory(cat){
+    return (cat || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function semanticColor(cat){
+    var norm = normCategory(cat);
+    for(var i=0;i<SEMANTIC_COLORS.length;i++){
+      var entry = SEMANTIC_COLORS[i];
+      for(var j=0;j<entry.words.length;j++){
+        if(norm.indexOf(entry.words[j]) !== -1) return entry.color;
+      }
+    }
+    return null;
+  }
+
+  function normHeader(h){
+    return h.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[^a-z0-9]/g,'');
+  }
+
+  function parseCSV(text){
+    text = text.replace(/^\uFEFF/,'');
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
+    var delim = detectDelimiter(text);
+    for(var i=0;i<text.length;i++){
+      var c = text[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(text[i+1] === '"'){ field += '"'; i++; }
+          else { inQuotes = false; }
+        } else { field += c; }
+      } else {
+        if(c === '"'){ inQuotes = true; }
+        else if(c === delim){ row.push(field); field=''; }
+        else if(c === '\r'){ /* skip */ }
+        else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+        else { field += c; }
+      }
+    }
+    if(field.length || row.length){ row.push(field); rows.push(row); }
+    rows = rows.filter(function(r){ return !(r.length===1 && r[0].trim()===''); });
+    if(!rows.length) return [];
+    var headers = rows[0].map(function(h){ return normHeader(h); });
+    var out = [];
+    for(var r=1;r<rows.length;r++){
+      var obj = {};
+      for(var c2=0;c2<headers.length;c2++){
+        obj[headers[c2]] = (rows[r][c2] !== undefined ? rows[r][c2] : '').trim();
+      }
+      out.push(obj);
+    }
+    return out;
+  }
+
+  function detectDelimiter(text){
+    var firstLine = text.split(/\r?\n/)[0] || '';
+    var counts = {',':0,';':0,'\t':0};
+    var inQ = false;
+    for(var i=0;i<firstLine.length;i++){
+      var c = firstLine[i];
+      if(c === '"') inQ = !inQ;
+      else if(!inQ && counts.hasOwnProperty(c)) counts[c]++;
+    }
+    var best = ',', bestN = -1;
+    for(var k in counts){ if(counts[k] > bestN){ bestN = counts[k]; best = k; } }
+    return best;
+  }
+
+  function roundToMinute(d){
+    return new Date(Math.round(d.getTime()/60000)*60000);
+  }
+
+  function parseDate(str){
+    if(!str) return null;
+    str = str.trim();
+    if(!str) return null;
+
+    // unambiguous ISO-like: YYYY-MM-DD or YYYY/MM/DD, optional time
+    var iso = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if(iso){
+      var y = +iso[1], mo = +iso[2], da = +iso[3];
+      var ihh = iso[4] ? +iso[4] : 0, imm = iso[5] ? +iso[5] : 0, iss = iso[6] ? +iso[6] : 0;
+      var di = new Date(Date.UTC(y, mo-1, da, ihh, imm, iss));
+      if(!isNaN(di.getTime())) return roundToMinute(di);
+    }
+
+    // day-first European format: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, optional time
+    var eu = str.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if(eu){
+      var day = +eu[1], mon = +eu[2], year = +eu[3];
+      if(year < 100) year += 2000;
+      var hh = eu[4] ? +eu[4] : 0, mm = eu[5] ? +eu[5] : 0, ss = eu[6] ? +eu[6] : 0;
+      var de = new Date(Date.UTC(year, mon-1, day, hh, mm, ss));
+      if(!isNaN(de.getTime())) return roundToMinute(de);
+    }
+
+    // last resort: let the browser try (handles textual/other formats). This
+    // path alone remains subject to the terminal's timezone for exotic
+    // inputs that don't match either pattern above.
+    var d = new Date(str);
+    if(!isNaN(d.getTime())) return roundToMinute(d);
+
+    return null;
+  }
+
+  function firstNonEmpty(){
+    for(var i=0;i<arguments.length;i++){
+      if(arguments[i] !== undefined && arguments[i] !== null && String(arguments[i]).trim() !== '') return arguments[i];
+    }
+    return '';
+  }
+
+  function parseLatLonPair(latStr, lonStr){
+    var lat = parseFloat(latStr), lon = parseFloat(lonStr);
+    if(isNaN(lat) || isNaN(lon)) return null;
+    if(Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat: lat, lon: lon };
+  }
+
+  function parseLatLonCombined(str){
+    if(!str) return null;
+    var parts = String(str).split(',');
+    if(parts.length !== 2) return null;
+    return parseLatLonPair(parts[0], parts[1]);
+  }
+
+  // Looks for coordinates already present in the row for the "à" location,
+  // under a few common column-naming conventions (a_lat/a_lon as separate
+  // numbers, or location_à as a single "lat,lon" field). Using these when
+  // present avoids depending on name-based geocoding entirely.
+  function extractACoords(r){
+    return parseLatLonPair(r['alat'], r['alon']) ||
+      parseLatLonCombined(r['locationa']) ||
+      null;
+  }
+
+  function rowsToEvents(rows, fileIndex){
+    var out = [];
+    rows.forEach(function(r){
+      var start = parseDate(r['start']);
+      var end = parseDate(r['end']);
+      if(!start || !end) return;
+      if(end < start){ var tmp = start; start = end; end = tmp; }
+      var sub = firstNonEmpty(r['souscategorie']);
+      var objet = firstNonEmpty(r['objet']);
+      var a = firstNonEmpty(r['a']);
+      var name = (sub + ' ' + objet + (a ? ' à ' + a : '')).trim();
+      var liens = [r['lien1'], r['lien2'], r['lien3']]
+        .map(function(v){ return (v || '').trim(); })
+        .filter(Boolean);
+      out.push({
+        start: start,
+        end: end,
+        category: sub,
+        name: name || '—',
+        de: firstNonEmpty(r['de']),
+        a: a,
+        aCoords: extractACoords(r),
+        reference: firstNonEmpty(r['reference']),
+        statut: firstNonEmpty(r['statut']),
+        euros: firstNonEmpty(r['euros']),
+        variante: firstNonEmpty(r['variante'], r['variantes'], r['variant']),
+        liens: liens.join(' '),
+        fileIndex: fileIndex
+      });
+    });
+    return out;
+  }
+
+  // Picks black or white text for legibility against a given background
+  // color (hex or hsl()), based on relative luminance.
+  function relLuminance(r, g, b){
+    function chan(c){ c = c/255; return c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+    return 0.2126*chan(r) + 0.7152*chan(g) + 0.0722*chan(b);
+  }
+
+  function contrastRatio(l1, l2){
+    var lighter = Math.max(l1, l2), darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function readableTextColor(bg){
+    var r, g, b;
+    if(bg.indexOf('hsl') === 0){
+      var m = bg.match(/hsl\(([\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/);
+      if(m){
+        var hsl = hslToRgb(+m[1], +m[2]/100, +m[3]/100);
+        r = hsl[0]; g = hsl[1]; b = hsl[2];
+      } else { r = g = b = 128; }
+    } else {
+      var hex = bg.replace('#', '');
+      if(hex.length === 3) hex = hex.split('').map(function(c){ return c+c; }).join('');
+      r = parseInt(hex.substr(0,2), 16);
+      g = parseInt(hex.substr(2,2), 16);
+      b = parseInt(hex.substr(4,2), 16);
+    }
+    var lumBg = relLuminance(r, g, b);
+    var crWhite = contrastRatio(lumBg, 1);
+    var crBlack = contrastRatio(lumBg, 0);
+    return crWhite > crBlack ? '#ffffff' : '#0b0c0f';
+  }
+
+  function hslToRgb(h, s, l){
+    h = h/360;
+    function hue2rgb(p, q, t){
+      if(t < 0) t += 1;
+      if(t > 1) t -= 1;
+      if(t < 1/6) return p + (q-p)*6*t;
+      if(t < 1/2) return q;
+      if(t < 2/3) return p + (q-p)*(2/3-t)*6;
+      return p;
+    }
+    var r, g, b;
+    if(s === 0){ r = g = b = l; }
+    else {
+      var q = l < 0.5 ? l*(1+s) : l+s-l*s;
+      var p = 2*l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+  }
+
+  function assignColors(){
+    var cats = Array.from(new Set(allEvents.map(function(e){ return e.category; }))).sort();
+    categoryColors = {};
+    var usedColors = {};
+
+    cats.forEach(function(cat){
+      var sem = semanticColor(cat);
+      if(sem){
+        categoryColors[cat] = sem;
+        usedColors[sem] = true;
+      }
+    });
+
+    var fallbackIndex = 0;
+    cats.forEach(function(cat){
+      if(categoryColors[cat]) return;
+      while(fallbackIndex < PALETTE.length && usedColors[PALETTE[fallbackIndex]]) fallbackIndex++;
+      var color;
+      if(fallbackIndex < PALETTE.length){
+        color = PALETTE[fallbackIndex];
+        fallbackIndex++;
+      } else {
+        var hue = (fallbackIndex * 137.508) % 360;
+        fallbackIndex++;
+        color = 'hsl(' + hue.toFixed(0) + ',72%,55%)';
+      }
+      categoryColors[cat] = color;
+      usedColors[color] = true;
+    });
+  }
+
+  function fmtDateTime(d){
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    return pad(d.getUTCDate())+'/'+pad(d.getUTCMonth()+1)+'/'+d.getUTCFullYear()+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
+  }
+
+  // ---------- rendering ----------
+
+  function getOrientation(){
+    return window.innerWidth >= window.innerHeight ? 'horizontal' : 'vertical';
+  }
+
+  var TICKS_MS = [
+    60000, 5*60000, 15*60000, 30*60000,
+    3600000, 3*3600000, 6*3600000, 12*3600000,
+    86400000, 7*86400000, 30*86400000, 90*86400000, 365*86400000, 5*365*86400000
+  ];
+
+  function chooseTick(totalMs, targetCount){
+    var raw = totalMs / targetCount;
+    for(var i=0;i<TICKS_MS.length;i++){
+      if(TICKS_MS[i] >= raw) return TICKS_MS[i];
+    }
+    return TICKS_MS[TICKS_MS.length-1];
+  }
+
+  // Generates tick instants. For steps of a day or more, steps follow the
+  // UTC calendar (midnight-to-midnight, month-to-month, matching how event
+  // dates are now anchored) instead of raw epoch-millisecond multiples, so
+  // labels and lines stay correlated and independent of the terminal's timezone.
+  function generateTicks(minStart, maxEnd, tickMs){
+    var ticks = [];
+    if(tickMs >= 86400000){
+      var d0 = new Date(minStart);
+      var cur = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate(), 0, 0, 0, 0);
+      var stepDays = null, stepMonths = null;
+      if(tickMs === 86400000) stepDays = 1;
+      else if(tickMs === 7*86400000) stepDays = 7;
+      else if(tickMs === 30*86400000) stepMonths = 1;
+      else if(tickMs === 90*86400000) stepMonths = 3;
+      else if(tickMs === 365*86400000) stepMonths = 12;
+      else stepMonths = 60;
+      var guard = 0;
+      var curDate = new Date(cur);
+      while(curDate.getTime() <= maxEnd && guard < 5000){
+        if(curDate.getTime() >= minStart) ticks.push(curDate.getTime());
+        if(stepDays) curDate.setUTCDate(curDate.getUTCDate() + stepDays);
+        else curDate.setUTCMonth(curDate.getUTCMonth() + stepMonths);
+        guard++;
+      }
+    } else {
+      var dm = new Date(minStart);
+      var utcMidnight = Date.UTC(dm.getUTCFullYear(), dm.getUTCMonth(), dm.getUTCDate(), 0, 0, 0, 0);
+      var k = Math.ceil((minStart - utcMidnight) / tickMs);
+      var tickStart = utcMidnight + k * tickMs;
+      for(var t = tickStart; t <= maxEnd; t += tickMs){ ticks.push(t); }
+    }
+    return ticks;
+  }
+
+  // UTC-midnight day boundaries (00:00/12:00), matching the raw CSV values.
+  function dayBoundaries(minStart, maxEnd){
+    var lines = [];
+    var d0 = new Date(minStart);
+    var cur = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate(), 0, 0, 0, 0));
+    var guard = 0;
+    while(cur.getTime() <= maxEnd && guard < 8000){
+      var midnight = cur.getTime();
+      var noon = midnight + 12*3600000;
+      if(midnight >= minStart && midnight <= maxEnd) lines.push(midnight);
+      if(noon >= minStart && noon <= maxEnd) lines.push(noon);
+      cur.setUTCDate(cur.getUTCDate() + 1);
+      guard++;
+    }
+    return lines;
+  }
+
+  // Weekend (Saturday+Sunday) spans, merged into single blocks, clipped to
+  // [minStart, maxEnd]. Day-of-week uses UTC, consistent with the rest of
+  // the page's "raw numbers" date convention.
+  function weekendIntervals(minStart, maxEnd){
+    var d0 = new Date(minStart);
+    var cur = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate());
+    var intervals = [];
+    var guard = 0;
+    while(cur <= maxEnd && guard < 4000){
+      var dow = new Date(cur).getUTCDay();
+      if(dow === 6){
+        intervals.push([cur, cur + 2*86400000]);
+        cur += 2*86400000;
+      } else if(dow === 0){
+        intervals.push([cur, cur + 86400000]);
+        cur += 86400000;
+      } else {
+        cur += 86400000;
+      }
+      guard++;
+    }
+    return intervals
+      .map(function(iv){ return [Math.max(iv[0], minStart), Math.min(iv[1], maxEnd)]; })
+      .filter(function(iv){ return iv[1] > iv[0]; });
+  }
+
+  function stackLane(events){
+    // simple greedy interval stacking within a variante lane
+    events.sort(function(a,b){ return a.start - b.start; });
+    var tracks = []; // each holds last end time
+    events.forEach(function(e){
+      var placed = false;
+      for(var i=0;i<tracks.length;i++){
+        if(tracks[i] <= e.start.getTime()){
+          e._track = i;
+          tracks[i] = e.end.getTime();
+          placed = true;
+          break;
+        }
+      }
+      if(!placed){
+        e._track = tracks.length;
+        tracks.push(e.end.getTime());
+      }
+    });
+    return tracks.length;
+  }
+
+  // ---------- night background gradient (black -> medium gray, by sunrise/sunset) ----------
+  // Location = the "à" field of events whose category reads as "nuit" (night).
+  // Sunrise/sunset are computed locally (classic almanac algorithm), no API
+  // needed for the astronomy — only geocoding the place name to lat/lon.
+
+  var nightAnchorsCache = {};
+  var nightTransitions = null; // null = no gradient; [] / array = computed
+
+  function isNightCategory(catName){
+    var norm = normCategory(catName);
+    return ['nuit','nocturne','dodo','coucher','sommeil'].some(function(w){ return norm.indexOf(w) !== -1; });
+  }
+
+  function geocodeLocation(name){
+    var url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(name) + '&count=1&language=fr&format=json';
+    return fetch(url).then(function(r){ return r.json(); }).then(function(data){
+      if(data && data.results && data.results.length){
+        var r0 = data.results[0];
+        return { lat: r0.latitude, lon: r0.longitude, timezone: r0.timezone };
+      }
+      throw new Error('geocoding: no result for ' + name);
+    });
+  }
+
+  // Converts a true UTC instant into the wall-clock numbers it corresponds
+  // to in a given IANA timezone, then re-encodes those numbers using the
+  // same "raw" UTC-anchor convention used for every other date in the app
+  // (see parseDate). Without this, sun times -- computed in true UTC --
+  // would land on the wrong spot of an axis whose numbers are meant to be
+  // read as local clock time at the event's own location.
+  function utcInstantToRaw(utcMs, timezone, lonFallback){
+    if(timezone){
+      try{
+        var dtf = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone, hour12: false,
+          year:'numeric', month:'2-digit', day:'2-digit',
+          hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+        var map = {};
+        dtf.formatToParts(new Date(utcMs)).forEach(function(p){ map[p.type] = p.value; });
+        var h = +map.hour; if(h === 24) h = 0;
+        return Date.UTC(+map.year, +map.month-1, +map.day, h, +map.minute, +map.second);
+      } catch(err){ /* fall through to longitude approximation below */ }
+    }
+    if(typeof lonFallback === 'number'){
+      // No IANA zone name available (coordinates came straight from the CSV
+      // rather than geocoding) -- approximate the offset from longitude.
+      // Doesn't account for DST, but is far better than leaving it at true
+      // UTC, which is what caused sunrise/sunset to look implausible before.
+      var offsetH = Math.round(lonFallback / 15);
+      return utcMs + offsetH * 3600000;
+    }
+    return utcMs;
+  }
+
+  // Classic sunrise/sunset almanac algorithm (public-domain formula).
+  // Returns UTC-ms timestamps for the given calendar date at (lat, lon),
+  // or null for sunrise/sunset if the sun doesn't rise/set that day.
+  function sunTimesUTC(year, month, day, lat, lon){
+    var rad = Math.PI / 180;
+    var dateUTC = Date.UTC(year, month - 1, day);
+    var dayOfYear = Math.floor((dateUTC - Date.UTC(year, 0, 1)) / 86400000) + 1;
+    var lngHour = lon / 15;
+
+    function calc(isRise){
+      var t = dayOfYear + ((isRise ? 6 : 18) - lngHour) / 24;
+      var M = (0.9856 * t) - 3.289;
+      var L = M + 1.916*Math.sin(rad*M) + 0.020*Math.sin(2*rad*M) + 282.634;
+      L = (L + 360) % 360;
+      var RA = (1/rad) * Math.atan(0.91764 * Math.tan(rad*L));
+      RA = (RA + 360) % 360;
+      var Lq = Math.floor(L/90)*90, RAq = Math.floor(RA/90)*90;
+      RA = (RA + (Lq - RAq)) / 15;
+      var sinDec = 0.39782 * Math.sin(rad*L);
+      var cosDec = Math.cos(Math.asin(sinDec));
+      var cosH = (Math.cos(rad*90.833) - sinDec*Math.sin(rad*lat)) / (cosDec*Math.cos(rad*lat));
+      if(cosH > 1 || cosH < -1) return null;
+      var H = isRise ? 360 - (1/rad)*Math.acos(cosH) : (1/rad)*Math.acos(cosH);
+      H = H/15;
+      var T = H + RA - 0.06571*t - 6.622;
+      return ((T - lngHour) + 24) % 24;
+    }
+
+    var riseUT = calc(true), setUT = calc(false);
+    return {
+      sunrise: riseUT === null ? null : dateUTC + riseUT*3600000,
+      sunset: setUT === null ? null : dateUTC + setUT*3600000
+    };
+  }
+
+  function updateNightGradient(){
+    var anchorEvents = allEvents.filter(function(e){ return isNightCategory(e.category) && e.a; });
+    if(!anchorEvents.length){ nightTransitions = null; render(); return; }
+
+    // Prefer coordinates already embedded in the CSV (any row for a given
+    // name that has them), caching by name so rows sharing the same "à"
+    // location but lacking their own coordinates can reuse them too.
+    anchorEvents.forEach(function(e){
+      if(e.aCoords && !nightAnchorsCache[e.a]){
+        nightAnchorsCache[e.a] = { lat: e.aCoords.lat, lon: e.aCoords.lon, timezone: null };
+      }
+    });
+
+    var names = Array.from(new Set(anchorEvents.map(function(e){ return e.a; })));
+    var namesNeedingGeocode = names.filter(function(name){ return !nightAnchorsCache[name]; });
+    Promise.all(namesNeedingGeocode.map(function(name){
+      return geocodeLocation(name).then(function(g){
+        nightAnchorsCache[name] = g;
+      }).catch(function(){
+        nightAnchorsCache[name] = 'error';
+      });
+    })).then(function(){
+      computeNightTransitions(anchorEvents);
+    });
+  }
+
+  function computeNightTransitions(anchorEvents){
+    var anchors = anchorEvents.map(function(e){
+      var geo = nightAnchorsCache[e.a];
+      if(!geo || geo === 'error') return null;
+      return { time: e.start.getTime(), lat: geo.lat, lon: geo.lon, timezone: geo.timezone };
+    }).filter(Boolean).sort(function(a,b){ return a.time - b.time; });
+
+    if(!anchors.length){ nightTransitions = null; render(); return; }
+
+    var minT = Math.min.apply(null, allEvents.map(function(e){ return e.start.getTime(); }));
+    var maxT = Math.max.apply(null, allEvents.map(function(e){ return e.end.getTime(); }));
+    var d0 = new Date(minT), d1 = new Date(maxT);
+    var startDayUTC = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate() - 1);
+    var endDayUTC = Date.UTC(d1.getUTCFullYear(), d1.getUTCMonth(), d1.getUTCDate() + 1);
+
+    var cur = startDayUTC;
+    var transitions = [];
+    var guard = 0;
+    while(cur <= endDayUTC && guard < 1500){
+      var dayMs = cur;
+      var best = anchors[0], bestDiff = Math.abs(dayMs - anchors[0].time);
+      for(var i=1;i<anchors.length;i++){
+        var diff = Math.abs(dayMs - anchors[i].time);
+        if(diff < bestDiff){ bestDiff = diff; best = anchors[i]; }
+      }
+      var curDate = new Date(cur);
+      var st = sunTimesUTC(curDate.getUTCFullYear(), curDate.getUTCMonth()+1, curDate.getUTCDate(), best.lat, best.lon);
+      if(st.sunrise !== null) transitions.push({ t: utcInstantToRaw(st.sunrise, best.timezone, best.lon), kind: 'sunrise' });
+      if(st.sunset !== null) transitions.push({ t: utcInstantToRaw(st.sunset, best.timezone, best.lon), kind: 'sunset' });
+      cur += 86400000;
+      guard++;
+    }
+    transitions.sort(function(a,b){ return a.t - b.t; });
+    nightTransitions = transitions;
+    render();
+  }
+
+  // A refined night -> day palette (deep navy night, soft slate day) with a
+  // warm dawn/dusk glow right at each sunrise/sunset instant, rather than a
+  // flat black/gray swap.
+  var NIGHT_BG = '#0a0c16';
+  var DAY_BG = '#23283a';
+  var GLOW_BG = '#463640';
+
+  function buildNightGradientCSS(transitions, posOf, orientation){
+    if(!transitions || !transitions.length) return null;
+    var RAMP_MS = 40*60000;
+    var firstColor = transitions[0].kind === 'sunrise' ? NIGHT_BG : DAY_BG;
+    var prevColor = firstColor;
+    var stops = [{ pos: 0, color: firstColor }];
+    transitions.forEach(function(tr){
+      var pos = Math.max(0, Math.min(100, posOf(tr.t)*100));
+      var beforePos = Math.max(0, Math.min(100, posOf(tr.t - RAMP_MS)*100));
+      var afterPos = Math.max(0, Math.min(100, posOf(tr.t + RAMP_MS)*100));
+      var newColor = tr.kind === 'sunrise' ? DAY_BG : NIGHT_BG;
+      stops.push({ pos: Math.min(beforePos, pos), color: prevColor });
+      stops.push({ pos: pos, color: GLOW_BG });
+      stops.push({ pos: Math.max(afterPos, pos), color: newColor });
+      prevColor = newColor;
+    });
+    stops.push({ pos: 100, color: prevColor });
+    stops.sort(function(a,b){ return a.pos - b.pos; });
+    var dir = orientation === 'horizontal' ? 'to right' : 'to bottom';
+    return 'linear-gradient(' + dir + ', ' + stops.map(function(s){ return s.color + ' ' + s.pos.toFixed(3) + '%'; }).join(', ') + ')';
+  }
+
+  // ---------- non-linear scale (compact nights / empty days) ----------
+
+  function mergeIntervals(intervals){
+    intervals.sort(function(a,b){ return a[0] - b[0]; });
+    var merged = [];
+    intervals.forEach(function(iv){
+      if(merged.length && iv[0] <= merged[merged.length-1][1]){
+        merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], iv[1]);
+      } else {
+        merged.push(iv.slice());
+      }
+    });
+    return merged;
+  }
+
+  function nightCategoryIntervals(){
+    var ivs = allEvents.filter(function(e){ return isNightCategory(e.category); })
+      .map(function(e){ return [e.start.getTime(), e.end.getTime()]; });
+    return mergeIntervals(ivs);
+  }
+
+  // Runs of two or more consecutive UTC calendar days with no event at all.
+  function emptyDayIntervals(minStart, maxEnd){
+    var d0 = new Date(minStart);
+    var cur = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate());
+    var days = [];
+    var guard = 0;
+    while(cur <= maxEnd && guard < 4000){ days.push(cur); cur += 86400000; guard++; }
+
+    var busy = days.map(function(dayStart){
+      var dayEnd = dayStart + 86400000;
+      return allEvents.some(function(e){ return e.start.getTime() < dayEnd && e.end.getTime() > dayStart; });
+    });
+
+    var intervals = [];
+    var i = 0;
+    while(i < days.length){
+      if(!busy[i]){
+        var j = i;
+        while(j < days.length && !busy[j]) j++;
+        if(j - i >= 2) intervals.push([days[i], days[j-1] + 86400000]);
+        i = j;
+      } else { i++; }
+    }
+    return intervals;
+  }
+
+  var COMPACT_WEIGHT_MS = 40 * 60000; // a compacted block visually "counts" as ~40 normal minutes
+
+  function buildScale(minStart, maxEnd){
+    var intervals = [];
+    if(compactNights) intervals = intervals.concat(nightCategoryIntervals());
+    if(compactEmptyDays) intervals = intervals.concat(emptyDayIntervals(minStart, maxEnd));
+    intervals = intervals
+      .map(function(iv){ return [Math.max(iv[0], minStart), Math.min(iv[1], maxEnd)]; })
+      .filter(function(iv){ return iv[1] > iv[0]; });
+    if(!intervals.length) return null;
+    var merged = mergeIntervals(intervals);
+
+    var segments = [];
+    var cursor = minStart;
+    merged.forEach(function(iv){
+      if(iv[0] > cursor) segments.push({ start: cursor, end: iv[0], compact: false });
+      segments.push({ start: iv[0], end: iv[1], compact: true });
+      cursor = iv[1];
+    });
+    if(cursor < maxEnd) segments.push({ start: cursor, end: maxEnd, compact: false });
+
+    var acc = 0;
+    segments.forEach(function(seg){
+      seg.weight = seg.compact ? COMPACT_WEIGHT_MS : (seg.end - seg.start);
+      seg.cumStart = acc;
+      acc += seg.weight;
+      seg.cumEnd = acc;
+    });
+    return { segments: segments, total: acc };
+  }
+
+  function posOfScale(scale, t){
+    var segs = scale.segments;
+    for(var i=0;i<segs.length;i++){
+      var s = segs[i];
+      if(t <= s.end || i === segs.length-1){
+        var d = s.end - s.start;
+        var frac = d > 0 ? Math.min(1, Math.max(0, (t - s.start)/d)) : 0;
+        return (s.cumStart + frac*s.weight) / scale.total;
+      }
+    }
+    return 1;
+  }
+
+  function timeAtScale(scale, frac){
+    var target = Math.max(0, Math.min(1, frac)) * scale.total;
+    var segs = scale.segments;
+    for(var i=0;i<segs.length;i++){
+      var s = segs[i];
+      if(target <= s.cumEnd || i === segs.length-1){
+        var local = s.weight > 0 ? (target - s.cumStart) / s.weight : 0;
+        return s.start + local * (s.end - s.start);
+      }
+    }
+    return segs[segs.length-1].end;
+  }
+
+  // Shared time <-> fraction model, independent of zoom/orientation, so both
+  // rendering and the manual date-range controls stay perfectly consistent.
+  function computeTimeModel(){
+    var minStart = allEvents[0].start.getTime();
+    var maxEnd = allEvents[0].end.getTime();
+    allEvents.forEach(function(e){
+      if(e.start.getTime() < minStart) minStart = e.start.getTime();
+      if(e.end.getTime() > maxEnd) maxEnd = e.end.getTime();
+    });
+    var span = Math.max(maxEnd - minStart, 60000);
+    var pad = span * 0.02;
+    minStart -= pad; maxEnd += pad; span = maxEnd - minStart;
+    var scale = (compactNights || compactEmptyDays) ? buildScale(minStart, maxEnd) : null;
+    return {
+      minStart: minStart,
+      maxEnd: maxEnd,
+      span: span,
+      scale: scale,
+      posOf: function(t){ return scale ? posOfScale(scale, t) : (t - minStart) / span; },
+      timeAt: function(frac){ return scale ? timeAtScale(scale, frac) : minStart + frac*span; }
+    };
+  }
+
+  function render(){
+    if(viewMode === 'calendar') renderCalendarView();
+    else renderTimelineView();
+  }
+
+  function renderTimelineView(){
+    var container = document.getElementById('timeline');
+    var empty = document.getElementById('empty');
+    container.innerHTML = '';
+    container.classList.remove('calendar');
+
+    if(!allEvents.length){
+      empty.style.display = 'flex';
+      document.getElementById('resetBtn').style.display = 'none';
+      document.getElementById('icsBtn').style.display = 'none';
+      document.getElementById('compactDaysBtn').style.display = 'none';
+      document.getElementById('compactNightsBtn').style.display = 'none';
+      document.getElementById('viewModeBtn').style.display = 'none';
+      document.getElementById('fitViewBtn').style.display = 'none';
+      document.getElementById('zoomInBtn').style.display = 'none';
+      document.getElementById('zoomOutBtn').style.display = 'none';
+      document.getElementById('rangeControls').style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    document.getElementById('resetBtn').style.display = 'flex';
+    document.getElementById('icsBtn').style.display = 'flex';
+    document.getElementById('compactDaysBtn').style.display = 'flex';
+    document.getElementById('compactNightsBtn').style.display = 'flex';
+    document.getElementById('viewModeBtn').style.display = 'flex';
+    document.getElementById('fitViewBtn').style.display = 'flex';
+    document.getElementById('zoomInBtn').style.display = 'flex';
+    document.getElementById('zoomOutBtn').style.display = 'flex';
+    document.getElementById('rangeControls').style.display = 'flex';
+    var daysBtn = document.getElementById('compactDaysBtn');
+    daysBtn.classList.toggle('active', compactEmptyDays);
+    daysBtn.title = compactEmptyDays ? 'Réafficher les jours sans événement' : 'Compacter les jours sans événement';
+    var nightsBtn = document.getElementById('compactNightsBtn');
+    nightsBtn.classList.toggle('active', compactNights);
+    nightsBtn.title = compactNights ? 'Réafficher les nuits normalement' : 'Compacter les nuits';
+
+    var orientation = getOrientation();
+    container.className = orientation;
+
+    var model = computeTimeModel();
+    var minStart = model.minStart, maxEnd = model.maxEnd, span = model.span, posOf = model.posOf;
+
+    var nightCSS = buildNightGradientCSS(nightTransitions, posOf, orientation);
+    container.style.backgroundImage = nightCSS || 'none';
+
+    // group by (source file, variante) so each CSV's rows land in their own
+    // lanes, stacked below any previously loaded file's lanes
+    var groups = {};
+    var order = [];
+    allEvents.forEach(function(e){
+      var vkey = e.variante || 'A';
+      var key = e.fileIndex + '\u0000' + vkey;
+      if(!groups[key]){ groups[key] = { fileIndex: e.fileIndex, variante: vkey, events: [] }; order.push(key); }
+      groups[key].events.push(e);
+    });
+    order.sort(function(ka, kb){
+      var ga = groups[ka], gb = groups[kb];
+      if(ga.fileIndex !== gb.fileIndex) return ga.fileIndex - gb.fileIndex;
+      return ga.variante.localeCompare(gb.variante);
+    });
+
+    var viewport = document.getElementById('viewport');
+    var baseSize = orientation === 'horizontal' ? viewport.clientWidth : viewport.clientHeight;
+    baseSize = Math.max(baseSize, 600);
+    var mainSize = baseSize * zoomLevel;
+
+    var TRACK_PX = 68;
+    var LANE_GAP = 6;
+    var AXIS_SIZE = orientation === 'horizontal' ? 26 : 66;
+
+    if(orientation === 'horizontal'){
+      container.style.width = mainSize + 'px';
+    } else {
+      container.style.height = mainSize + 'px';
+    }
+
+    // grid ticks first (attached to container, spanning full cross size later)
+    var tickMs = chooseTick(span, orientation === 'horizontal' ? Math.max(4, mainSize/140) : Math.max(4, mainSize/90));
+    var ticks = generateTicks(minStart, maxEnd, tickMs);
+
+    var totalCross = 0;
+    var laneEls = [];
+
+    var axis = document.createElement('div');
+    axis.className = 'axis';
+    if(orientation === 'horizontal'){
+      axis.style.height = AXIS_SIZE + 'px';
+      axis.style.width = mainSize + 'px';
+    } else {
+      axis.style.width = AXIS_SIZE + 'px';
+      axis.style.height = mainSize + 'px';
+    }
+    ticks.forEach(function(tms){
+      var pos = posOf(tms);
+      var tick = document.createElement('div');
+      tick.className = 'axis-tick';
+      var label = document.createElement('div');
+      label.className = 'axis-label';
+      label.textContent = tickLabelFor(tms, tickMs, new Date(tms));
+      if(orientation === 'horizontal'){
+        tick.style.left = (pos*100) + '%';
+        label.style.left = (pos*100) + '%';
+      } else {
+        tick.style.top = (pos*100) + '%';
+        label.style.top = (pos*100) + '%';
+      }
+      axis.appendChild(tick);
+      axis.appendChild(label);
+    });
+    container.appendChild(axis);
+
+    var lastFileIndex = null;
+    order.forEach(function(key){
+      var g = groups[key];
+      var evs = g.events;
+      var tracks = stackLane(evs);
+      var laneCross = Math.max(TRACK_PX, tracks * TRACK_PX);
+
+      var lane = document.createElement('div');
+      lane.className = 'lane';
+      if(lastFileIndex !== null && g.fileIndex !== lastFileIndex) lane.className += ' file-start';
+      lastFileIndex = g.fileIndex;
+      if(orientation === 'horizontal'){
+        lane.style.height = laneCross + 'px';
+      } else {
+        lane.style.width = laneCross + 'px';
+      }
+
+      var tag = document.createElement('div');
+      tag.className = 'lane-tag';
+      tag.textContent = g.variante || '';
+      lane.appendChild(tag);
+
+      evs.forEach(function(e){
+        var s = posOf(e.start.getTime());
+        var en = posOf(e.end.getTime());
+        var w = Math.max(en - s, 0.0015);
+        var el = document.createElement('div');
+        el.className = 'event';
+        var color = fileColors[e.fileIndex] || e.forcedColor || categoryColors[e.category] || '#888';
+        el.style.background = color;
+        var trackOffset = 16 + e._track * TRACK_PX;
+        var trackHeight = TRACK_PX - 10;
+
+        if(orientation === 'horizontal'){
+          el.style.left = (s*100) + '%';
+          el.style.width = (w*100) + '%';
+          el.style.top = trackOffset + 'px';
+          el.style.height = trackHeight + 'px';
+        } else {
+          el.style.top = (s*100) + '%';
+          el.style.height = (w*100) + '%';
+          el.style.left = trackOffset + 'px';
+          el.style.width = trackHeight + 'px';
+        }
+
+        var capS = document.createElement('div');
+        capS.className = 'cap s';
+        var capE = document.createElement('div');
+        capE.className = 'cap e';
+        el.appendChild(capS);
+        el.appendChild(capE);
+
+        var label = document.createElement('div');
+        label.className = 'event-label';
+        var labelSpan = document.createElement('span');
+        labelSpan.textContent = e.name;
+        var textColor = readableTextColor(color);
+        labelSpan.style.color = textColor;
+        labelSpan.style.textShadow = textColor === '#ffffff'
+          ? '0 1px 2px rgba(0,0,0,0.55)'
+          : '0 1px 1px rgba(255,255,255,0.35)';
+        label.appendChild(labelSpan);
+        el.appendChild(label);
+
+        attachTooltip(el, e);
+        lane.appendChild(el);
+      });
+
+      container.appendChild(lane);
+      laneEls.push(lane);
+      totalCross += laneCross;
+    });
+
+    // weekend (Sat/Sun) tint, behind the grid lines
+    weekendIntervals(minStart, maxEnd).forEach(function(iv){
+      var posStart = posOf(iv[0]);
+      var posEnd = posOf(iv[1]);
+      var band = document.createElement('div');
+      band.className = 'weekend-band';
+      if(orientation === 'horizontal'){
+        band.style.left = (posStart*100) + '%';
+        band.style.width = ((posEnd-posStart)*100) + '%';
+        band.style.top = AXIS_SIZE + 'px';
+        band.style.height = totalCross + 'px';
+      } else {
+        band.style.top = (posStart*100) + '%';
+        band.style.height = ((posEnd-posStart)*100) + '%';
+        band.style.left = AXIS_SIZE + 'px';
+        band.style.width = totalCross + 'px';
+      }
+      container.appendChild(band);
+    });
+
+    // faint grid lines through the lanes area (labels live in the sticky axis above/left)
+    ticks.forEach(function(tms){
+      var pos = posOf(tms);
+      var line = document.createElement('div');
+      line.className = 'tick-line';
+      if(orientation === 'horizontal'){
+        line.style.left = (pos*100) + '%';
+        line.style.top = AXIS_SIZE + 'px';
+        line.style.height = totalCross + 'px';
+      } else {
+        line.style.top = (pos*100) + '%';
+        line.style.left = AXIS_SIZE + 'px';
+        line.style.width = totalCross + 'px';
+      }
+      container.appendChild(line);
+    });
+
+    // day boundaries (local midnight), only when zoomed in enough to be legible
+    var pxPerHalfDay = mainSize * (43200000 / span);
+    if(pxPerHalfDay >= 3){
+      dayBoundaries(minStart, maxEnd).forEach(function(tms){
+        var pos = posOf(tms);
+        var dline = document.createElement('div');
+        dline.className = 'day-line';
+        if(orientation === 'horizontal'){
+          dline.style.left = (pos*100) + '%';
+          dline.style.top = AXIS_SIZE + 'px';
+          dline.style.height = totalCross + 'px';
+        } else {
+          dline.style.top = (pos*100) + '%';
+          dline.style.left = AXIS_SIZE + 'px';
+          dline.style.width = totalCross + 'px';
+        }
+        container.appendChild(dline);
+      });
+    }
+
+    // now line
+    var now = Date.now();
+    if(now >= minStart && now <= maxEnd){
+      var npos = posOf(now);
+      var nl = document.createElement('div');
+      nl.className = 'now-line';
+      if(orientation === 'horizontal'){
+        nl.style.left = (npos*100)+'%'; nl.style.top = AXIS_SIZE + 'px'; nl.style.height = totalCross + 'px';
+      } else {
+        nl.style.top = (npos*100)+'%'; nl.style.left = AXIS_SIZE + 'px'; nl.style.width = totalCross + 'px';
+      }
+      container.appendChild(nl);
+    }
+
+    updateRangeInputs();
+  }
+
+  var DOW_LABELS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  var MONTH_LABELS_SHORT = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  var CAL_TRACK_H = 22;
+  var CAL_HEADER_H = 16;
+  var CAL_EMPTY_H = 14;
+  var CAL_ROW_PAD = 6;
+
+  function mondayOfUTC(ms){
+    var d = new Date(ms);
+    var dow = (d.getUTCDay() + 6) % 7; // 0=Monday
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dow);
+  }
+
+  function stackWeekEvents(events){
+    events.sort(function(a, b){
+      return a._dayStart - b._dayStart || (b._dayEnd - b._dayStart) - (a._dayEnd - a._dayStart);
+    });
+    var tracks = [];
+    events.forEach(function(ev){
+      var placed = false;
+      for(var i=0;i<tracks.length;i++){
+        if(tracks[i] < ev._dayStart){ ev._track = i; tracks[i] = ev._dayEnd; placed = true; break; }
+      }
+      if(!placed){ ev._track = tracks.length; tracks.push(ev._dayEnd); }
+    });
+    return tracks.length;
+  }
+
+  function renderCalendarView(){
+    var container = document.getElementById('timeline');
+    container.innerHTML = '';
+    container.className = 'calendar';
+    container.style.backgroundImage = 'none';
+
+    document.getElementById('compactDaysBtn').style.display = 'none';
+    document.getElementById('compactNightsBtn').style.display = 'none';
+    document.getElementById('zoomInBtn').style.display = 'none';
+    document.getElementById('zoomOutBtn').style.display = 'none';
+    document.getElementById('fitViewBtn').title = 'Aller à aujourd\'hui';
+
+    // sticky day-of-week header
+    var head = document.createElement('div');
+    head.className = 'cal-dow-header';
+    DOW_LABELS.forEach(function(label){
+      var d = document.createElement('div');
+      d.textContent = label;
+      head.appendChild(d);
+    });
+    container.appendChild(head);
+
+    var minStart = allEvents[0].start.getTime();
+    var maxEnd = allEvents[0].end.getTime();
+    allEvents.forEach(function(e){
+      if(e.start.getTime() < minStart) minStart = e.start.getTime();
+      if(e.end.getTime() > maxEnd) maxEnd = e.end.getTime();
+    });
+
+    var todayMidnight = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    var firstWeekStart = mondayOfUTC(minStart);
+    var lastWeekStart = mondayOfUTC(maxEnd);
+
+    calendarWeeks = [];
+    var cursor = firstWeekStart;
+    var guard = 0;
+    var runningTop = head.offsetHeight || 26;
+
+    while(cursor <= lastWeekStart && guard < 3000){
+      var weekStart = cursor;
+      var weekEnd = weekStart + 7*86400000;
+
+      var weekEvents = allEvents.filter(function(e){
+        return e.start.getTime() < weekEnd && e.end.getTime() > weekStart;
+      }).map(function(e){
+        var s = Math.max(e.start.getTime(), weekStart);
+        var en = Math.min(e.end.getTime(), weekEnd);
+        var dayStart = Math.floor((s - weekStart) / 86400000);
+        var dayEnd = Math.max(dayStart, Math.ceil((en - weekStart) / 86400000) - 1);
+        return { e: e, _dayStart: Math.min(6, Math.max(0, dayStart)), _dayEnd: Math.min(6, Math.max(0, dayEnd)) };
+      });
+
+      var trackCount = weekEvents.length ? stackWeekEvents(weekEvents) : 0;
+      var isEmpty = weekEvents.length === 0;
+      var rowHeight = isEmpty ? CAL_EMPTY_H : (CAL_HEADER_H + trackCount*CAL_TRACK_H + CAL_ROW_PAD);
+
+      var weekEl = document.createElement('div');
+      weekEl.className = 'cal-week';
+      weekEl.style.height = rowHeight + 'px';
+
+      for(var i=0;i<7;i++){
+        var dayMs = weekStart + i*86400000;
+        var cell = document.createElement('div');
+        cell.className = 'cal-daycell';
+        if(i >= 5) cell.className += ' weekend';
+        if(dayMs === todayMidnight) cell.className += ' today';
+        cell.style.left = (i/7*100) + '%';
+        cell.style.width = (1/7*100) + '%';
+
+        var dObj = new Date(dayMs);
+        var dom = dObj.getUTCDate();
+        if(dom === 1){
+          var mlabel = document.createElement('div');
+          mlabel.className = 'cal-month-label';
+          mlabel.textContent = MONTH_LABELS_SHORT[dObj.getUTCMonth()] + ' ' + dObj.getUTCFullYear();
+          cell.appendChild(mlabel);
+        } else if(!isEmpty){
+          var dnum = document.createElement('div');
+          dnum.className = 'cal-daynum';
+          dnum.textContent = dom;
+          cell.appendChild(dnum);
+        }
+        weekEl.appendChild(cell);
+      }
+
+      weekEvents.forEach(function(we){
+        var e = we.e;
+        var color = fileColors[e.fileIndex] || e.forcedColor || categoryColors[e.category] || '#888';
+        var el = document.createElement('div');
+        el.className = 'cal-event';
+        el.style.background = color;
+        el.style.left = (we._dayStart/7*100) + '%';
+        el.style.width = ((we._dayEnd - we._dayStart + 1)/7*100) + '%';
+        el.style.top = (CAL_HEADER_H + we._track*CAL_TRACK_H) + 'px';
+        el.style.height = (CAL_TRACK_H - 4) + 'px';
+        var label = document.createElement('div');
+        label.className = 'cal-event-label';
+        label.textContent = e.name;
+        label.style.color = readableTextColor(color);
+        el.appendChild(label);
+        attachTooltip(el, e);
+        weekEl.appendChild(el);
+      });
+
+      container.appendChild(weekEl);
+      calendarWeeks.push({ weekStart: weekStart, weekEnd: weekEnd, top: runningTop, height: rowHeight });
+      runningTop += rowHeight;
+
+      cursor += 7*86400000;
+      guard++;
+    }
+
+    updateRangeInputs();
+  }
+
+  function tickLabelFor(ms, step, d){
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    if(step >= 30*86400000){
+      return d.toLocaleDateString('fr-FR', {month:'short', year:'numeric', timeZone:'UTC'});
+    }
+    if(step >= 86400000){
+      return pad(d.getUTCDate())+'/'+pad(d.getUTCMonth()+1)+'/'+d.getUTCFullYear();
+    }
+    return pad(d.getUTCDate())+'/'+pad(d.getUTCMonth()+1)+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
+  }
+
+  // ---------- tooltip ----------
+
+  var tooltip = document.getElementById('tooltip');
+
+  function pairLine(a, b){
+    if(a && b) return a + ' \u2192 ' + b;
+    if(a) return a;
+    if(b) return b;
+    return '';
+  }
+
+  function isEffectivelyZero(str){
+    var n = parseFloat(String(str).replace(',', '.').replace(/[^\d.\-]/g, ''));
+    return !isNaN(n) && n === 0;
+  }
+
+  function buildTooltipContent(e){
+    var lines = [];
+    var deLine = pairLine(e.de, e.a);
+    if(deLine) lines.push(row('', deLine));
+    lines.push(row('', fmtDateTime(e.start) + ' \u2192 ' + fmtDateTime(e.end)));
+    if(e.reference) lines.push(row('réf', e.reference));
+    if(e.euros && !isEffectivelyZero(e.euros)) lines.push(row('€', e.euros));
+    if(e.variante) lines.push(row('Variante :', e.variante, true));
+    if(e.liens) lines.push(row('liens', linksHtml(e.liens)));
+    if(e.statut) lines.push(row('statut', e.statut));
+    var color = fileColors[e.fileIndex] || e.forcedColor || categoryColors[e.category] || '#888';
+    var textColor = readableTextColor(color);
+    var title = '<div class="t-title" style="background:'+color+';color:'+textColor+'">'+escapeHtml(e.name)+'</div>';
+    return title + lines.join('');
+  }
+
+  function linksHtml(raw){
+    var parts = raw.split(/[\s,;]+/).filter(Boolean);
+    return parts.map(function(u){
+      var href = /^https?:\/\//i.test(u) ? u : 'https://' + u;
+      return '<a href="'+escapeAttr(href)+'" target="_blank" rel="noopener">'+escapeHtml(u)+'</a>';
+    }).join('<br>');
+  }
+
+  function row(k, v, strong){
+    var valueSpan = strong ? '<span style="font-weight:700;color:var(--text)">'+v+'</span>' : '<span>'+v+'</span>';
+    return '<div class="t-row">' + (k ? '<span class="k">'+escapeHtml(k)+'</span>' : '') + valueSpan + '</div>';
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  function attachTooltip(el, e){
+    el.addEventListener('mouseenter', function(ev){
+      if(pinnedTooltip) return;
+      showTooltip(e, ev.clientX, ev.clientY);
+    });
+    el.addEventListener('mousemove', function(ev){
+      if(pinnedTooltip) return;
+      positionTooltip(ev.clientX, ev.clientY);
+    });
+    el.addEventListener('mouseleave', function(){
+      if(pinnedTooltip) return;
+      hideTooltip();
+    });
+    el.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      pinnedTooltip = true;
+      showTooltip(e, ev.clientX, ev.clientY);
+    });
+  }
+
+  function showTooltip(e, x, y){
+    tooltip.innerHTML = buildTooltipContent(e);
+    tooltip.classList.add('show');
+    positionTooltip(x, y);
+  }
+  function positionTooltip(x, y){
+    var pad = 14;
+    var rect = tooltip.getBoundingClientRect();
+    var left = x + pad, top = y + pad;
+    if(left + rect.width > window.innerWidth) left = x - rect.width - pad;
+    if(top + rect.height > window.innerHeight) top = y - rect.height - pad;
+    tooltip.style.left = Math.max(4,left) + 'px';
+    tooltip.style.top = Math.max(4,top) + 'px';
+  }
+  function hideTooltip(){
+    tooltip.classList.remove('show');
+  }
+  document.addEventListener('click', function(){
+    if(pinnedTooltip){ pinnedTooltip = false; hideTooltip(); }
+  });
+
+  // ---------- ICS export ----------
+
+  function icsEscape(s){
+    return String(s || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r?\n/g, '\\n');
+  }
+
+  function toICSDate(d){
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    return d.getUTCFullYear() + pad(d.getUTCMonth()+1) + pad(d.getUTCDate()) + 'T' +
+      pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds());
+  }
+  function toICSStampUTC(d){
+    return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  }
+
+  function buildICS(){
+    var lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Timeline CSV//FR', 'CALSCALE:GREGORIAN'];
+    var stamp = toICSStampUTC(new Date());
+    allEvents.forEach(function(e, i){
+      var descParts = [];
+      var deLine = pairLine(e.de, e.a);
+      if(deLine) descParts.push(deLine);
+      if(e.reference) descParts.push('Réf : ' + e.reference);
+      if(e.statut) descParts.push('Statut : ' + e.statut);
+      if(e.euros && !isEffectivelyZero(e.euros)) descParts.push('€ : ' + e.euros);
+      if(e.variante) descParts.push('Variante : ' + e.variante);
+      if(e.liens) descParts.push('Liens : ' + e.liens);
+
+      lines.push('BEGIN:VEVENT');
+      lines.push('UID:' + i + '-' + Date.now() + '@timeline-csv');
+      lines.push('DTSTAMP:' + stamp);
+      lines.push('DTSTART:' + toICSDate(e.start));
+      lines.push('DTEND:' + toICSDate(e.end));
+      lines.push('SUMMARY:' + icsEscape(e.name));
+      if(descParts.length) lines.push('DESCRIPTION:' + icsEscape(descParts.join('\n')));
+      if(e.a) lines.push('LOCATION:' + icsEscape(e.a));
+      if(e.category) lines.push('CATEGORIES:' + icsEscape(e.category));
+      lines.push('END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n');
+  }
+
+  function exportICS(){
+    if(!allEvents.length) return;
+    var ics = buildICS();
+    var blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var filename = (loadedFiles.map(function(f){ return f.name; }).join('_') || 'timeline') + '.ics';
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  document.getElementById('icsBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    exportICS();
+  });
+
+  // ---------- file handling ----------
+
+  function updateHeaderAndTitle(){
+    var names = loadedFiles.map(function(f){ return f.name; });
+    document.title = names.join(' · ') || DEFAULT_TITLE;
+    renderHeader();
+  }
+
+  function renderHeader(){
+    var header = document.getElementById('fileChips');
+    header.innerHTML = '';
+    loadedFiles.forEach(function(f){
+      var chip = document.createElement('div');
+      chip.className = 'file-chip' + (f.status === 'pending' ? ' pending' : '') + (f.status === 'empty' ? ' empty' : '');
+
+      var label = document.createElement('span');
+      label.textContent = f.name;
+      chip.appendChild(label);
+
+      if(f.duplicate){
+        var dot = document.createElement('span');
+        dot.className = 'warn-dot';
+        dot.title = 'Un fichier du même nom est déjà chargé';
+        chip.appendChild(dot);
+      }
+
+      if(f.status === 'pending'){
+        var spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        chip.title = 'Chargement…';
+        chip.appendChild(spinner);
+      } else {
+        if(f.status === 'empty'){
+          chip.title = 'Aucun événement valide trouvé (vérifiez le délimiteur, les colonnes start/end, ou les dates)';
+        }
+
+        var swatch = document.createElement('label');
+        swatch.className = 'color-swatch';
+        swatch.title = 'Choisir la couleur de ' + f.name;
+        swatch.style.background = fileColors[f.index] || '#555a66';
+        var colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.value = fileColors[f.index] || '#888888';
+        colorInput.addEventListener('input', function(ev){
+          ev.stopPropagation();
+          fileColors[f.index] = colorInput.value;
+          persistFiles();
+          render();
+        });
+        swatch.appendChild(colorInput);
+        chip.appendChild(swatch);
+
+        var del = document.createElement('button');
+        del.className = 'del';
+        del.title = 'Retirer ' + f.name;
+        del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+        del.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          removeFile(f.index);
+        });
+        chip.appendChild(del);
+      }
+      header.appendChild(chip);
+    });
+  }
+
+  function removeFile(index){
+    allEvents = allEvents.filter(function(e){ return e.fileIndex !== index; });
+    loadedFiles = loadedFiles.filter(function(f){ return f.index !== index; });
+    delete fileColors[index];
+    if(!loadedFiles.length){
+      categoryColors = {};
+      zoomLevel = 1;
+      nightTransitions = null;
+      clearPersistedFiles();
+    } else {
+      assignColors();
+      updateNightGradient();
+      persistFiles();
+    }
+    updateHeaderAndTitle();
+    render();
+  }
+
+  var fileInput = document.getElementById('fileInput');
+  document.getElementById('addBtn').addEventListener('click', function(){ fileInput.click(); });
+  document.getElementById('resetBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    allEvents = [];
+    categoryColors = {};
+    loadedFiles = [];
+    fileColors = {};
+    fileCounter = 0;
+    zoomLevel = 1;
+    compactNights = false;
+    compactEmptyDays = false;
+    nightTransitions = null;
+    clearPersistedFiles();
+    updateHeaderAndTitle();
+    render();
+  });
+
+  // ---------- local persistence ----------
+  // Stores each loaded file's raw text in localStorage so the page can
+  // restore the same data next time it's opened in this browser, without
+  // re-uploading. Uses localStorage (not window.storage) because this is a
+  // standalone downloaded file, not a hosted Claude artifact.
+
+  function persistFiles(){
+    try{
+      var payload = loadedFiles
+        .filter(function(f){ return f.rawText !== undefined; })
+        .map(function(f){ return { name: f.name, ext: f.ext, content: f.rawText, color: fileColors[f.index] || null }; });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch(e){
+      // storage unavailable, disabled, or quota exceeded: skip silently
+    }
+  }
+
+  function clearPersistedFiles(){
+    try{ localStorage.removeItem(STORAGE_KEY); } catch(e){}
+  }
+
+  function ingestParsedContent(content, ext, idx, fallbackName){
+    var evs;
+    try{
+      if(ext === 'ics'){
+        var parsed = parseICS(content);
+        var now = Date.now();
+        evs = icsEventsToEvents(parsed, idx, fallbackName).filter(function(e){ return e.end.getTime() >= now; });
+      } else {
+        var rows = parseCSV(content);
+        evs = rowsToEvents(rows, idx);
+      }
+    } catch(err){
+      evs = [];
+    }
+    return evs;
+  }
+
+  function restoreFromStorage(){
+    var raw;
+    try{ raw = localStorage.getItem(STORAGE_KEY); } catch(e){ return; }
+    if(!raw) return;
+    var payload;
+    try{ payload = JSON.parse(raw); } catch(e){ return; }
+    if(!Array.isArray(payload) || !payload.length) return;
+
+    payload.forEach(function(item){
+      if(!item || typeof item.content !== 'string') return;
+      var idx = fileCounter++;
+      var isDuplicate = loadedFiles.some(function(f){ return f.name.toLowerCase() === String(item.name).toLowerCase(); });
+      var entry = { index: idx, name: item.name, status: 'pending', duplicate: isDuplicate, rawText: item.content, ext: item.ext };
+      loadedFiles.push(entry);
+      if(item.color) fileColors[idx] = item.color;
+      var evs = ingestParsedContent(item.content, item.ext, idx, item.name);
+      entry.status = evs.length ? 'ok' : 'empty';
+      allEvents = allEvents.concat(evs);
+    });
+
+    updateHeaderAndTitle();
+    assignColors();
+    updateNightGradient();
+    render();
+  }
+
+  function loadFiles(fileList){
+    var files = Array.from(fileList || []).filter(function(f){
+      return /\.csv$/i.test(f.name) || /\.ics$/i.test(f.name) ||
+        f.type === 'text/csv' || f.type === 'text/calendar' || f.type === '';
+    });
+    var pending = files.length;
+    if(!pending) return;
+    files.forEach(function(file){
+      var isICS = /\.ics$/i.test(file.name) || file.type === 'text/calendar';
+      var idx = fileCounter++;
+      var baseName = file.name.replace(/\.(csv|ics)$/i, '');
+      var isDuplicate = loadedFiles.some(function(f){ return f.name.toLowerCase() === baseName.toLowerCase(); });
+      var entry = { index: idx, name: baseName, status: 'pending', duplicate: isDuplicate, ext: isICS ? 'ics' : 'csv' };
+      loadedFiles.push(entry);
+      renderHeader();
+
+      var reader = new FileReader();
+      reader.onload = function(){
+        var content = String(reader.result);
+        entry.rawText = content;
+        var evs = ingestParsedContent(content, entry.ext, idx, entry.name);
+        entry.status = evs.length ? 'ok' : 'empty';
+        allEvents = allEvents.concat(evs);
+        renderHeader();
+        pending--;
+        if(pending === 0){
+          updateHeaderAndTitle();
+          assignColors();
+          updateNightGradient();
+          render();
+          persistFiles();
+        }
+      };
+      reader.onerror = function(){
+        entry.status = 'empty';
+        renderHeader();
+        pending--;
+        if(pending === 0){
+          updateHeaderAndTitle();
+          assignColors();
+          updateNightGradient();
+          render();
+          persistFiles();
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+  }
+
+  fileInput.addEventListener('change', function(){
+    loadFiles(fileInput.files);
+    fileInput.value = '';
+  });
+
+  // ---------- .ics parsing helpers (e.g. exported from Google Calendar) ----------
+
+  function unescapeICSText(s){
+    return s.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
+  }
+
+  // Resolves any CSS-understood color (named color like "tomato", hex, or
+  // rgb()) to a #rrggbb hex string, using the browser's own color engine
+  // rather than a hand-maintained lookup table.
+  function resolveCssColorToHex(value){
+    if(!value) return null;
+    var probe = document.createElement('div');
+    probe.style.display = 'none';
+    probe.style.color = value;
+    document.body.appendChild(probe);
+    var resolved = getComputedStyle(probe).color;
+    document.body.removeChild(probe);
+    var m = resolved && resolved.match(/\d+(\.\d+)?/g);
+    if(!m || m.length < 3) return null;
+    var toHex = function(n){ var h = Math.round(+n).toString(16); return h.length < 2 ? '0'+h : h; };
+    return '#' + toHex(m[0]) + toHex(m[1]) + toHex(m[2]);
+  }
+
+  function parseICSDateRaw(raw){
+    // Reads the literal digits (ignoring any trailing Z / TZID offset), so
+    // an imported instant lands on the axis using the same "raw numbers"
+    // convention as everything else in the page.
+    var m = raw && raw.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?/);
+    if(!m) return null;
+    return Date.UTC(+m[1], +m[2]-1, +m[3], m[4]?+m[4]:0, m[5]?+m[5]:0, m[6]?+m[6]:0);
+  }
+
+  function parseICS(text){
+    var rawLines = text.split(/\r\n|\n|\r/);
+    var lines = [];
+    rawLines.forEach(function(line){
+      if(/^[ \t]/.test(line) && lines.length){
+        lines[lines.length-1] += line.slice(1);
+      } else {
+        lines.push(line);
+      }
+    });
+
+    var calName = '', calColor = '';
+    var events = [];
+    var cur = null;
+    lines.forEach(function(line){
+      if(line === 'BEGIN:VEVENT'){ cur = {}; return; }
+      if(line === 'END:VEVENT'){ if(cur) events.push(cur); cur = null; return; }
+      var idx = line.indexOf(':');
+      if(idx === -1) return;
+      var prop = line.slice(0, idx).split(';')[0].toUpperCase();
+      var value = line.slice(idx+1);
+      if(cur){
+        if(prop === 'DTSTART') cur.start = parseICSDateRaw(value);
+        else if(prop === 'DTEND') cur.end = parseICSDateRaw(value);
+        else if(prop === 'SUMMARY') cur.summary = unescapeICSText(value);
+        else if(prop === 'DESCRIPTION') cur.description = unescapeICSText(value);
+        else if(prop === 'LOCATION') cur.location = unescapeICSText(value);
+        else if(prop === 'CATEGORIES') cur.categories = unescapeICSText(value);
+        else if(prop === 'COLOR') cur.color = value.trim();
+      } else {
+        // VCALENDAR-level properties, seen before the first VEVENT
+        if(prop === 'X-WR-CALNAME') calName = unescapeICSText(value);
+        else if(prop === 'X-APPLE-CALENDAR-COLOR') calColor = value.trim();
+        else if(prop === 'X-OUTLOOK-COLOR' && !calColor) calColor = value.trim();
+      }
+    });
+    return { calName: calName, calColor: calColor, events: events };
+  }
+
+  // Converts parsed VEVENTs into our event model. Also best-effort parses
+  // our own DESCRIPTION format back out (réf/statut/€/variante/liens, and a
+  // "X → Y" line), so re-importing a .ics this page exported round-trips
+  // cleanly; a generic Google Calendar export just won't have those extras.
+  // Colors: an explicit VEVENT COLOR (RFC 7986) wins, then the calendar's
+  // own color (X-APPLE-CALENDAR-COLOR/X-OUTLOOK-COLOR); if neither is
+  // present, events fall back to a category (CATEGORIES, else the
+  // calendar's name, else the file name) so different imported calendars
+  // still read as visually distinct via the normal category-color system.
+  // Google Calendar exports carry no color data at all (see conversation),
+  // so for these specific known ICS sources, colors are assigned by keyword
+  // found in the calendar name or file name (checked in this order; first
+  // match wins). Anything else imported as .ics falls back to light gray.
+  var ICS_NAME_COLOR_RULES = [
+    { word: 'guen', color: '#2dc653' },   // vert
+    { word: 'tibo', color: '#3a86ff' },   // bleu
+    { word: 'boris', color: '#f77f00' },  // orange
+    { word: 'voyage', color: '#e63946' }  // rouge
+  ];
+  var ICS_DEFAULT_COLOR = '#c7cdd6'; // gris clair
+
+  function icsNameBasedColor(calName, fallbackName){
+    var norm = normCategory((calName || '') + ' ' + (fallbackName || ''));
+    for(var i=0;i<ICS_NAME_COLOR_RULES.length;i++){
+      if(norm.indexOf(ICS_NAME_COLOR_RULES[i].word) !== -1) return ICS_NAME_COLOR_RULES[i].color;
+    }
+    return ICS_DEFAULT_COLOR;
+  }
+
+  function icsEventsToEvents(parsed, fileIndex, fallbackName){
+    var out = [];
+    var calColorHex = parsed.calColor ? resolveCssColorToHex(parsed.calColor) : null;
+    var defaultCategory = parsed.calName || fallbackName || 'Calendrier';
+    var nameColor = icsNameBasedColor(parsed.calName, fallbackName);
+    parsed.events.forEach(function(ev){
+      if(ev.start == null || ev.end == null) return;
+      var start = roundToMinute(new Date(ev.start));
+      var end = roundToMinute(new Date(ev.end));
+      if(end < start){ var tmp = start; start = end; end = tmp; }
+
+      var reference = '', statut = '', euros = '', variante = '', liens = '', de = '', a = '';
+      if(ev.description){
+        ev.description.split('\n').forEach(function(l){
+          var m;
+          if((m = l.match(/^Réf\s*:\s*(.*)$/))) reference = m[1].trim();
+          else if((m = l.match(/^Statut\s*:\s*(.*)$/))) statut = m[1].trim();
+          else if((m = l.match(/^€\s*:\s*(.*)$/))) euros = m[1].trim();
+          else if((m = l.match(/^Variante\s*:\s*(.*)$/))) variante = m[1].trim();
+          else if((m = l.match(/^Liens\s*:\s*(.*)$/))) liens = m[1].trim();
+          else if(!de && !a && (m = l.match(/^(.+?)\s*\u2192\s*(.+)$/))){ de = m[1].trim(); a = m[2].trim(); }
+        });
+      }
+      if(!a && ev.location) a = ev.location;
+
+      var category = ev.categories || defaultCategory;
+      var name = ev.summary || '—';
+      var forcedColor = (ev.color && resolveCssColorToHex(ev.color)) || calColorHex || nameColor;
+
+      out.push({
+        start: start, end: end, category: category, name: name,
+        de: de, a: a, aCoords: null,
+        reference: reference, statut: statut, euros: euros, variante: variante,
+        liens: liens, fileIndex: fileIndex, forcedColor: forcedColor
+      });
+    });
+    return out;
+  }
+
+  document.getElementById('empty').addEventListener('click', function(){
+    fileInput.click();
+  });
+
+  var appEl = document.getElementById('app');
+  ['dragenter','dragover'].forEach(function(evt){
+    appEl.addEventListener(evt, function(e){
+      e.preventDefault();
+      appEl.classList.add('dragover');
+    });
+  });
+  ['dragleave','drop'].forEach(function(evt){
+    appEl.addEventListener(evt, function(e){
+      e.preventDefault();
+      if(evt === 'dragleave' && e.target !== appEl) return;
+      appEl.classList.remove('dragover');
+    });
+  });
+  appEl.addEventListener('drop', function(e){
+    e.preventDefault();
+    if(e.dataTransfer && e.dataTransfer.files) loadFiles(e.dataTransfer.files);
+  });
+
+  var viewportEl = document.getElementById('viewport');
+  var timelineEl = document.getElementById('timeline');
+
+  function applyZoom(factor, clientX, clientY){
+    if(!allEvents.length || viewMode === 'calendar') return;
+    var orientation = getOrientation();
+    var rect = viewportEl.getBoundingClientRect();
+    var cx = clientX !== undefined ? clientX : (rect.left + rect.width/2);
+    var cy = clientY !== undefined ? clientY : (rect.top + rect.height/2);
+    var cursorMain = orientation === 'horizontal' ? (cx - rect.left) : (cy - rect.top);
+    var scrollMain = orientation === 'horizontal' ? viewportEl.scrollLeft : viewportEl.scrollTop;
+    var containerMain = orientation === 'horizontal' ? timelineEl.offsetWidth : timelineEl.offsetHeight;
+    var fraction = containerMain > 0 ? (scrollMain + cursorMain) / containerMain : 0.5;
+    zoomLevel = Math.min(2000, Math.max(0.02, zoomLevel * factor));
+    render();
+    var newContainerMain = orientation === 'horizontal' ? timelineEl.offsetWidth : timelineEl.offsetHeight;
+    var newScroll = fraction * newContainerMain - cursorMain;
+    if(orientation === 'horizontal') viewportEl.scrollLeft = newScroll;
+    else viewportEl.scrollTop = newScroll;
+  }
+
+  viewportEl.addEventListener('wheel', function(e){
+    if(!(e.ctrlKey || e.metaKey)) return;
+    if(!allEvents.length) return;
+    e.preventDefault();
+    var factor = Math.exp(-e.deltaY * 0.0025);
+    applyZoom(factor, e.clientX, e.clientY);
+  }, {passive:false});
+
+  document.getElementById('zoomInBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    applyZoom(1.4);
+  });
+  document.getElementById('zoomOutBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    applyZoom(1/1.4);
+  });
+  document.getElementById('compactNightsBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    compactNights = !compactNights;
+    render();
+  });
+  document.getElementById('compactDaysBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    compactEmptyDays = !compactEmptyDays;
+    render();
+  });
+  document.getElementById('fitViewBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    if(viewMode === 'calendar'){
+      scrollCalendarToToday();
+      return;
+    }
+    zoomLevel = 1;
+    render();
+    viewportEl.scrollLeft = 0;
+    viewportEl.scrollTop = 0;
+  });
+
+  document.getElementById('viewModeBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    viewMode = viewMode === 'calendar' ? 'timeline' : 'calendar';
+    var btn = document.getElementById('viewModeBtn');
+    btn.title = viewMode === 'calendar' ? 'Basculer en vue timeline' : 'Basculer en vue calendrier';
+    btn.classList.toggle('active', viewMode === 'calendar');
+    render();
+    if(viewMode === 'calendar') scrollCalendarToToday();
+  });
+
+  function scrollCalendarToToday(){
+    var todayMidnight = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    var wk = calendarWeeks.find(function(w){ return w.weekEnd > todayMidnight; }) || calendarWeeks[calendarWeeks.length-1];
+    if(wk) viewportEl.scrollTop = Math.max(0, wk.top - 40);
+  }
+
+  // ---------- manual date-range window ----------
+  // Two datetime-local inputs in the header mirror the currently visible
+  // window (updated from scroll/zoom), and can also be edited directly to
+  // force the view to an exact [start, end] range.
+
+  function msToInputValue(ms){
+    var d = new Date(ms);
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())+'T'+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
+  }
+  function inputValueToMs(val){
+    var m = val && val.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if(!m) return null;
+    return Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
+  }
+
+  var rangeStartEl = document.getElementById('rangeStart');
+  var rangeEndEl = document.getElementById('rangeEnd');
+
+  function updateRangeInputs(){
+    if(!allEvents.length) return;
+    if(viewMode === 'calendar'){
+      if(!calendarWeeks.length) return;
+      var scrollTop = viewportEl.scrollTop, viewH = viewportEl.clientHeight;
+      var topWeek = calendarWeeks[0], bottomWeek = calendarWeeks[calendarWeeks.length-1];
+      for(var i=0;i<calendarWeeks.length;i++){
+        var w = calendarWeeks[i];
+        if(w.top + w.height > scrollTop){ topWeek = w; break; }
+      }
+      for(var j=calendarWeeks.length-1;j>=0;j--){
+        var w2 = calendarWeeks[j];
+        if(w2.top < scrollTop + viewH){ bottomWeek = w2; break; }
+      }
+      if(document.activeElement !== rangeStartEl) rangeStartEl.value = msToInputValue(topWeek.weekStart);
+      if(document.activeElement !== rangeEndEl) rangeEndEl.value = msToInputValue(bottomWeek.weekEnd);
+      return;
+    }
+    var model = computeTimeModel();
+    var orientation = getOrientation();
+    var scrollMain = orientation === 'horizontal' ? viewportEl.scrollLeft : viewportEl.scrollTop;
+    var viewMain = orientation === 'horizontal' ? viewportEl.clientWidth : viewportEl.clientHeight;
+    var containerMain = orientation === 'horizontal' ? timelineEl.offsetWidth : timelineEl.offsetHeight;
+    if(!containerMain) return;
+    var fracStart = Math.max(0, Math.min(1, scrollMain / containerMain));
+    var fracEnd = Math.max(0, Math.min(1, (scrollMain + viewMain) / containerMain));
+    var startT = model.timeAt(fracStart);
+    var endT = model.timeAt(fracEnd);
+    if(document.activeElement !== rangeStartEl) rangeStartEl.value = msToInputValue(startT);
+    if(document.activeElement !== rangeEndEl) rangeEndEl.value = msToInputValue(endT);
+  }
+
+  function applyManualRange(){
+    if(!allEvents.length) return;
+    var startT = inputValueToMs(rangeStartEl.value);
+    var endT = inputValueToMs(rangeEndEl.value);
+    if(startT === null || endT === null || endT <= startT) return;
+
+    if(viewMode === 'calendar'){
+      if(!calendarWeeks.length) return;
+      var wk = calendarWeeks.find(function(w){ return w.weekEnd > startT; }) || calendarWeeks[calendarWeeks.length-1];
+      viewportEl.scrollTop = Math.max(0, wk.top);
+      updateRangeInputs();
+      return;
+    }
+
+    var model = computeTimeModel();
+    var fracStart = model.posOf(startT);
+    var fracEnd = model.posOf(endT);
+    var denom = fracEnd - fracStart;
+    if(denom <= 0.0001) return;
+
+    var orientation = getOrientation();
+    var viewMain = orientation === 'horizontal' ? viewportEl.clientWidth : viewportEl.clientHeight;
+    var baseSize = Math.max(viewMain, 600);
+    var neededMainSize = viewMain / denom;
+    zoomLevel = Math.min(2000, Math.max(0.02, neededMainSize / baseSize));
+    render();
+
+    var newContainerMain = orientation === 'horizontal' ? timelineEl.offsetWidth : timelineEl.offsetHeight;
+    var newScroll = fracStart * newContainerMain;
+    if(orientation === 'horizontal') viewportEl.scrollLeft = newScroll;
+    else viewportEl.scrollTop = newScroll;
+    updateRangeInputs();
+  }
+
+  rangeStartEl.addEventListener('change', applyManualRange);
+  rangeEndEl.addEventListener('change', applyManualRange);
+
+  var scrollUpdateTimer;
+  viewportEl.addEventListener('scroll', function(){
+    clearTimeout(scrollUpdateTimer);
+    scrollUpdateTimer = setTimeout(updateRangeInputs, 100);
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 120);
+  });
+
+  // ---------- day/night page theme (distinct from the per-event time-of-day gradient) ----------
+
+  var THEME_KEY = 'csvTimelineTheme';
+  var SUN_ICON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>';
+  var MOON_ICON = '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>';
+
+  function applyTheme(mode){
+    var root = document.documentElement;
+    if(mode === 'day'){ root.setAttribute('data-theme', 'day'); }
+    else { root.removeAttribute('data-theme'); }
+    root.style.colorScheme = mode === 'day' ? 'light' : 'dark';
+    var btn = document.getElementById('themeBtn');
+    btn.innerHTML = mode === 'day' ? MOON_ICON : SUN_ICON;
+    btn.title = mode === 'day' ? 'Passer en mode nuit' : 'Passer en mode jour';
+    try{ localStorage.setItem(THEME_KEY, mode); } catch(e){}
+  }
+
+  document.getElementById('themeBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    var current = document.documentElement.getAttribute('data-theme') === 'day' ? 'day' : 'night';
+    applyTheme(current === 'day' ? 'night' : 'day');
+  });
+
+  (function initTheme(){
+    var saved = 'night';
+    try{ saved = localStorage.getItem(THEME_KEY) || 'night'; } catch(e){}
+    applyTheme(saved);
+  })();
+
+  render();
+  restoreFromStorage();
+})();
+</script>
+</body>
+</html>
