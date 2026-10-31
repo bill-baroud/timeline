@@ -591,10 +591,34 @@
     return parts[parts.length - 1].trim();
   }
 
+  // ICS LOCATION is usually a full address ("Gare de Lyon, Place Louis-Armand,
+  // 75012 Paris, France"): drop a trailing country, then prefer the segment
+  // after a postal code, else the last remaining segment.
+  var COUNTRY_WORDS = ['france','suisse','switzerland','italie','italy','espagne','spain','allemagne','germany',
+    'belgique','belgium','royaume-uni','united kingdom','uk','usa','united states','etats-unis','portugal','pays-bas',
+    'netherlands','luxembourg','autriche','austria','maroc','morocco','japon','japan','canada','irlande','ireland',
+    'grece','greece','croatie','croatia','norvege','norway','suede','sweden','danemark','denmark'];
+  function cityFromLocation(loc){
+    if(!loc) return '';
+    var parts = loc.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+    if(!parts.length) return '';
+    var last = parts[parts.length-1].normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+    if(parts.length > 1 && COUNTRY_WORDS.indexOf(last) !== -1) parts.pop();
+    for(var i = parts.length-1; i >= 0; i--){
+      var m = parts[i].match(/^\d{4,5}\s+(.+)$/);
+      if(m) return m[1].trim();
+    }
+    return parts[parts.length-1].replace(/\s+\d{4,5}$/, '').trim();
+  }
+
+  function eventCities(e){
+    if(e.locCity) return [e.locCity].concat(e.deFromDesc ? [extractCity(e.de)] : []);
+    return [extractCity(e.de), extractCity(e.a)];
+  }
+
   function matchesCityFilter(e){
     if(!cityFilter) return true;
-    var deCity = extractCity(e.de), aCity = extractCity(e.a);
-    return (deCity && normCategory(deCity) === cityFilter) || (aCity && normCategory(aCity) === cityFilter);
+    return eventCities(e).some(function(c){ return c && normCategory(c) === cityFilter; });
   }
 
   function visibleEvents(){
@@ -605,8 +629,7 @@
     var seen = {};
     var out = [];
     allEvents.forEach(function(e){
-      [e.de, e.a].forEach(function(v){
-        var city = extractCity(v);
+      eventCities(e).forEach(function(city){
         if(!city) return;
         var key = normCategory(city);
         if(!key || seen[key]) return;
@@ -2514,7 +2537,8 @@
         de: de, a: a, aCoords: null,
         reference: reference, statut: statut, euros: euros, variante: variante,
         liens: liens, fileIndex: fileIndex, forcedColor: forcedColor,
-        icsDescription: icsDescription, icsUrl: icsUrl
+        icsDescription: icsDescription, icsUrl: icsUrl,
+        locCity: cityFromLocation(ev.location), deFromDesc: !!de
       });
     });
     return out;
