@@ -31,6 +31,7 @@
     --weekend-tint:rgba(220,225,232,0.10);
     --del-hover-bg:rgba(255,107,107,0.16);
     --del-hover-text:#ff8787;
+    --swatch-ring:rgba(255,255,255,0.4);
     --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   }
@@ -53,6 +54,7 @@
     --weekend-tint:rgba(60,45,25,0.055);
     --del-hover-bg:rgba(214,52,52,0.14);
     --del-hover-text:#b3261e;
+    --swatch-ring:rgba(0,0,0,0.3);
   }
   *{box-sizing:border-box;}
   html,body{
@@ -88,6 +90,12 @@
     font-size:11.5px;
   }
   #rangeControls .arrow{ color:var(--text-dim); font-size:12px; }
+  #cityFilterWrap{ display:none; flex-shrink:0; }
+  #cityFilterSelect{
+    background:var(--chip-bg); border:1px solid var(--glass-border);
+    border-radius:6px; padding:5px 7px; color:var(--text); font-family:var(--sans);
+    font-size:11.5px; max-width:160px;
+  }
   .file-chip{
     display:flex; align-items:center; gap:2px;
     background:var(--chip-bg); border:1px solid var(--glass-border);
@@ -96,21 +104,28 @@
     white-space:nowrap;
   }
   .file-chip .color-swatch{
-    position:relative; width:14px; height:14px; border-radius:50%;
+    position:relative; width:17px; height:17px; border-radius:50%;
     margin-left:6px; flex-shrink:0; cursor:pointer;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+    box-shadow: inset 0 0 0 1.5px var(--swatch-ring);
+    transition:box-shadow .15s ease;
+  }
+  .file-chip .color-swatch:hover{
+    box-shadow: inset 0 0 0 1.5px var(--swatch-ring), 0 0 0 2px var(--glass-border);
+  }
+  .file-chip .color-swatch .swatch-clip{
+    position:absolute; inset:0; border-radius:50%; overflow:hidden;
   }
   .file-chip .color-swatch input[type="color"]{
-    position:absolute; inset:0; opacity:0; cursor:pointer; border:none; padding:0;
+    position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; border:none; padding:0;
   }
   .file-chip .del{
     display:flex; align-items:center; justify-content:center;
-    width:20px; height:20px; margin-left:4px; border-radius:50%;
+    width:22px; height:22px; margin-left:4px; border-radius:50%;
     color:var(--text-dim); cursor:pointer; background:transparent; border:none;
     transition:background .15s ease, color .15s ease;
   }
   .file-chip .del:hover{ background:var(--del-hover-bg); color:var(--del-hover-text); }
-  .file-chip .del svg{ width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.2; }
+  .file-chip .del svg{ width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2.2; }
 
   .file-chip.pending{ opacity:0.65; }
   .file-chip .spinner{
@@ -125,7 +140,7 @@
     margin-left:3px; flex-shrink:0;
   }
   #fab{
-    position:fixed; right:18px; bottom:18px; z-index:50;
+    position:fixed; right:18px; bottom:18px; z-index:56;
     display:flex; flex-direction:column; gap:10px; align-items:flex-end;
   }
   .fab-btn{
@@ -139,11 +154,30 @@
   .fab-btn:hover{ filter:brightness(1.15); transform:translateY(-1px); }
   .fab-btn.active{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
   .fab-btn svg{ width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  #fabPanel{
+    position:fixed; right:18px; bottom:74px; z-index:55;
+    display:none; flex-direction:column; gap:8px; align-items:flex-end;
+  }
+  #fabPanel.open{ display:flex; }
+  .fab-item{
+    display:flex; align-items:center; gap:10px;
+    padding:10px 16px 10px 14px; border-radius:22px;
+    background:var(--fab-bg); border:1px solid var(--glass-border);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    color:var(--text); cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    white-space:nowrap; font-family:var(--sans); font-size:13px;
+    appearance:none; -webkit-appearance:none; outline:none;
+    transition:background .15s ease, filter .15s ease;
+  }
+  .fab-item:hover{ filter:brightness(1.15); }
+  .fab-item.active{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
+  .fab-item svg{ width:18px; height:18px; flex-shrink:0; stroke:currentColor; fill:none; stroke-width:1.7; }
+  .fab-item .label{ font-size:13px; font-weight:600; }
   #fileInput{ display:none; }
 
   /* ---- empty state ---- */
   #empty{
-    position:absolute; top:50px; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center;
+    position:absolute; top:50px; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
     cursor:pointer;
     transition:background .15s ease;
   }
@@ -151,9 +185,15 @@
     width:64px; height:64px; stroke:var(--text-dim); fill:none; stroke-width:1.3;
     opacity:0.55; transition:opacity .15s ease, stroke .15s ease, transform .15s ease;
   }
+  #emptyHint{
+    margin-top:10px; font-family:var(--mono); font-size:11px; letter-spacing:.04em;
+    color:var(--text-dim); opacity:0.55; transition:opacity .15s ease, color .15s ease;
+  }
   #empty:hover svg{ opacity:0.9; stroke:var(--text); transform:translateY(-2px); }
+  #empty:hover #emptyHint{ opacity:0.85; color:var(--text); }
   #app.dragover #empty{ background:rgba(150,168,190,0.06); }
   #app.dragover #empty svg{ opacity:1; stroke:var(--text); }
+  #app.dragover #emptyHint{ opacity:0.85; color:var(--text); }
 
   /* ---- scroll viewport ---- */
   #viewport{
@@ -287,6 +327,57 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
 
+  /* ---- week view: one week, 7 day cells, titles wrap instead of truncating ---- */
+  #timeline.week{ display:flex; flex-direction:column; height:100%; }
+  .week-nav{
+    flex-shrink:0; position:sticky; top:0; z-index:30; height:34px;
+    display:flex; align-items:center; justify-content:center; gap:16px;
+    background:var(--bg); border-bottom:1px solid var(--grid-strong);
+  }
+  .week-nav button{
+    width:26px; height:26px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:transparent; border:1px solid var(--glass-border); color:var(--text);
+    cursor:pointer; transition:background .15s ease;
+  }
+  .week-nav button:hover{ background:var(--chip-bg); }
+  .week-nav button svg{ width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2.2; }
+  .week-range{ font-family:var(--mono); font-size:13px; font-weight:700; color:var(--text); min-width:170px; text-align:center; }
+
+  .week-grid{ flex:1 1 auto; min-height:0; display:flex; }
+  .week-grid.horizontal{ flex-direction:row; }
+  .week-grid.vertical{ flex-direction:column; overflow-y:auto; }
+
+  .week-daycell{
+    display:flex; flex-direction:column; min-height:0;
+    border-left:1px solid var(--lane-line); box-sizing:border-box;
+  }
+  .week-grid.horizontal .week-daycell{ flex:1 1 0; min-width:0; }
+  .week-grid.vertical .week-daycell{ border-left:none; border-top:1px solid var(--lane-line); flex-shrink:0; }
+  .week-daycell:first-child{ border-left:none; border-top:none; }
+  .week-daycell.weekend{ background:var(--weekend-tint); }
+  .week-daycell.today{ box-shadow: inset 0 0 0 1.5px var(--text-mid); }
+
+  .week-daycell-head{
+    flex-shrink:0; padding:6px 8px; font-family:var(--mono);
+    font-size:11px; font-weight:700; color:var(--text-mid);
+    border-bottom:1px solid var(--lane-line);
+  }
+  .week-daycell-list{ padding:6px; display:flex; flex-direction:column; gap:5px; }
+  .week-grid.horizontal .week-daycell-list{ flex:1 1 auto; min-height:0; overflow:hidden; }
+
+  .week-chip{
+    border-radius:6px; padding:5px 7px; font-size:11.5px; font-weight:600; line-height:1.3;
+    white-space:normal; word-break:break-word; cursor:pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2);
+    transition:filter .12s ease;
+  }
+  .week-chip:hover{ filter:brightness(1.08); }
+  .week-more{
+    flex-shrink:0; font-family:var(--mono); font-size:10.5px;
+    color:var(--text-dim); padding:1px 4px;
+  }
+
   /* ---- time axis (sticky) ---- */
   .axis{
     position:sticky; z-index:30; background:var(--bg);
@@ -325,7 +416,7 @@
     border-radius:6px 6px 0 0;
   }
   #tooltip .t-row{ display:flex; gap:6px; }
-  #tooltip .t-row .k{ color:var(--text-mid); font-family:var(--mono); font-size:10.5px; min-width:14px; }
+  #tooltip .t-row .k{ color:var(--text-mid); font-family:var(--mono); font-size:10.5px; flex:0 0 68px; white-space:nowrap; }
   #tooltip a{ color:#7ecbff; text-decoration:none; }
   #tooltip a:hover{ text-decoration:underline; }
 </style>
@@ -334,6 +425,11 @@
 <div id="app">
   <div id="header">
     <div id="fileChips"></div>
+    <div id="cityFilterWrap">
+      <select id="cityFilterSelect" title="Filtrer par ville">
+        <option value="">Toutes les villes</option>
+      </select>
+    </div>
     <div id="rangeControls">
       <input type="datetime-local" id="rangeStart" title="Début de la fenêtre affichée">
       <span class="arrow">→</span>
@@ -345,38 +441,58 @@
   </div>
   <div id="empty" title="Importer un ou plusieurs CSV / .ics">
     <svg viewBox="0 0 24 24"><path d="M12 4v11M7 9l5-5 5 5M4 20h16"/></svg>
+    <div id="emptyHint">CSV ou .ics</div>
   </div>
 
-  <div id="fab">
-    <div class="fab-btn" id="resetBtn" title="Tout effacer (y compris la sauvegarde locale)" style="display:none;">
+  <div id="fabPanel">
+    <button class="fab-item" id="resetBtn" title="Tout effacer (y compris la sauvegarde locale)" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
-    </div>
-    <div class="fab-btn" id="icsBtn" title="Exporter en .ics (Google Calendar, Outlook)" style="display:none;">
+      <span class="label">Tout effacer</span>
+    </button>
+    <button class="fab-item" id="icsBtn" title="Exporter en .ics (Google Calendar, Outlook)" style="display:none;">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 11"/></svg>
-    </div>
-    <div class="fab-btn" id="compactDaysBtn" title="Compacter les jours sans événement" style="display:none;">
+      <span class="label">Exporter .ics</span>
+    </button>
+    <button class="fab-item" id="compactDaysBtn" title="Compacter les jours sans événement" style="display:none;">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M9 14h1M14 14h1M9 18h1M14 18h1"/></svg>
-    </div>
-    <div class="fab-btn" id="compactNightsBtn" title="Compacter les nuits" style="display:none;">
+      <span class="label">Compacter les jours</span>
+    </button>
+    <button class="fab-item" id="compactNightsBtn" title="Compacter les nuits" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>
-    </div>
-    <div class="fab-btn" id="viewModeBtn" title="Basculer en vue calendrier" style="display:none;">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4M8 14h2M14 14h2M8 18h2M14 18h2"/></svg>
-    </div>
-    <div class="fab-btn" id="fitViewBtn" title="Réajuster sur toute la durée" style="display:none;">
-      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>
-    </div>
-    <div class="fab-btn" id="zoomOutBtn" title="Zoom arrière" style="display:none;">
+      <span class="label">Compacter les nuits</span>
+    </button>
+    <button class="fab-item" id="zoomOutBtn" title="Zoom arrière" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M7 10h6"/></svg>
-    </div>
-    <div class="fab-btn" id="zoomInBtn" title="Zoom avant" style="display:none;">
+      <span class="label">Zoom arrière</span>
+    </button>
+    <button class="fab-item" id="zoomInBtn" title="Zoom avant" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M10 7v6M7 10h6"/></svg>
-    </div>
-    <div class="fab-btn" id="addBtn" title="Ajouter un ou plusieurs CSV / .ics">
-      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-    </div>
-    <div class="fab-btn" id="themeBtn" title="Passer en mode jour">
+      <span class="label">Zoom avant</span>
+    </button>
+    <button class="fab-item" id="fitViewBtn" title="Réajuster sur toute la durée" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>
+      <span class="label">Réajuster</span>
+    </button>
+    <button class="fab-item" id="viewModeBtn" title="Basculer en vue calendrier" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4M8 14h2M14 14h2M8 18h2M14 18h2"/></svg>
+      <span class="label">Vue calendrier</span>
+    </button>
+    <button class="fab-item" id="weekViewBtn" title="Basculer en vue semaine" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="2" y="5" width="2.4" height="14" rx="1"/><rect x="6.8" y="5" width="2.4" height="14" rx="1"/><rect x="11.6" y="5" width="2.4" height="14" rx="1"/><rect x="16.4" y="5" width="2.4" height="14" rx="1"/><rect x="21.2" y="5" width="0.8" height="14" rx="0.4"/></svg>
+      <span class="label">Vue semaine</span>
+    </button>
+    <button class="fab-item" id="themeBtn" title="Passer en mode jour">
       <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>
+      <span class="label">Mode jour</span>
+    </button>
+    <button class="fab-item" id="addBtn" title="Ajouter un ou plusieurs CSV / .ics">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="label">Ajouter des fichiers</span>
+    </button>
+  </div>
+  <div id="fab">
+    <div class="fab-btn" id="menuToggleBtn" title="Actions">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </div>
   </div>
   <input type="file" id="fileInput" accept=".csv,.ics,text/csv,text/calendar" multiple>
@@ -387,11 +503,13 @@
 (function(){
 
   var allEvents = [];
+  var cityFilter = ''; // normalized city key, '' = toutes les villes
   var categoryColors = {};
   var pinnedTooltip = false;
   var zoomLevel = 1;
   var compactNights = false;
-  var viewMode = 'timeline'; // 'timeline' | 'calendar'
+  var viewMode = 'timeline'; // 'timeline' | 'calendar' | 'week'
+  var weekViewStart = null; // Monday 00:00 UTC of the week currently shown in week view
   var calendarWeeks = []; // filled by renderCalendarView(): {weekStart, weekEnd, top, height}
   var compactEmptyDays = false;
   var loadedFiles = []; // { index, name } — name has the .csv extension already stripped
@@ -456,6 +574,65 @@
   function normHeader(h){
     return h.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
       .toLowerCase().replace(/[^a-z0-9]/g,'');
+  }
+
+  // ---------- city filter ----------
+  // Matches an event if its departure ("de") or arrival ("a") field equals
+  // the selected city (accent/case-insensitive). '' (toutes les villes)
+  // always matches. Only affects which events are drawn \u2014 the time axis,
+  // day boundaries and night gradient stay computed from the full dataset
+  // so zoom/scroll position never jumps when the filter changes.
+  // "de"/"a" often hold more than a bare city name (e.g. "Gare de Lyon, Paris"
+  // for a transport leg) — the city is the last comma-separated segment, or
+  // the whole string when there's no comma (already a plain city name).
+  function extractCity(raw){
+    if(!raw) return '';
+    var parts = raw.split(',');
+    return parts[parts.length - 1].trim();
+  }
+
+  function matchesCityFilter(e){
+    if(!cityFilter) return true;
+    var deCity = extractCity(e.de), aCity = extractCity(e.a);
+    return (deCity && normCategory(deCity) === cityFilter) || (aCity && normCategory(aCity) === cityFilter);
+  }
+
+  function visibleEvents(){
+    return cityFilter ? allEvents.filter(matchesCityFilter) : allEvents;
+  }
+
+  function collectCityOptions(){
+    var seen = {};
+    var out = [];
+    allEvents.forEach(function(e){
+      [e.de, e.a].forEach(function(v){
+        var city = extractCity(v);
+        if(!city) return;
+        var key = normCategory(city);
+        if(!key || seen[key]) return;
+        seen[key] = true;
+        out.push({ key: key, label: city });
+      });
+    });
+    out.sort(function(a, b){ return a.label.localeCompare(b.label, 'fr'); });
+    return out;
+  }
+
+  function refreshCityFilterOptions(){
+    var select = document.getElementById('cityFilterSelect');
+    var options = collectCityOptions();
+    var previous = cityFilter;
+    select.innerHTML = '<option value="">Toutes les villes</option>';
+    options.forEach(function(opt){
+      var o = document.createElement('option');
+      o.value = opt.key;
+      o.textContent = opt.label;
+      select.appendChild(o);
+    });
+    var stillValid = options.some(function(opt){ return opt.key === previous; });
+    cityFilter = stillValid ? previous : '';
+    select.value = cityFilter;
+    document.getElementById('cityFilterWrap').style.display = allEvents.length ? 'flex' : 'none';
   }
 
   function parseCSV(text){
@@ -663,6 +840,47 @@
       b = hue2rgb(p, q, h - 1/3);
     }
     return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+  }
+
+  function rgbToHsl(r, g, b){
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h, s, l = (max + min) / 2;
+    if(max === min){ h = s = 0; }
+    else {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if(max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if(max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return [h, s, l];
+  }
+
+  function hexToRgbArr(hex){
+    hex = hex.replace('#', '');
+    if(hex.length === 3) hex = hex.split('').map(function(c){ return c + c; }).join('');
+    return [parseInt(hex.substr(0,2),16), parseInt(hex.substr(2,2),16), parseInt(hex.substr(4,2),16)];
+  }
+
+  function rgbArrToHex(rgb){
+    var toHex = function(n){ var h = Math.max(0, Math.min(255, Math.round(n))).toString(16); return h.length < 2 ? '0'+h : h; };
+    return '#' + toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
+  }
+
+  // Keeps a calendar's own embedded color (Apple/Outlook COLOR properties)
+  // recognizable — same hue — but pulls it toward the app's muted aesthetic:
+  // less saturated, and nudged into a legible mid-range of lightness so a
+  // very dark or very pale embedded color doesn't end up illegible either.
+  function softenEmbeddedColor(hex){
+    var rgb = hexToRgbArr(hex);
+    var hsl = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+    var h = hsl[0], s = hsl[1], l = hsl[2];
+    s *= 0.55;
+    if(l < 0.35) l = 0.35 + l * 0.3;
+    else if(l > 0.72) l = 0.72 - (1 - l) * 0.3;
+    return rgbArrToHex(hslToRgb(h, s, l));
   }
 
   function assignColors(){
@@ -1131,6 +1349,7 @@
 
   function render(){
     if(viewMode === 'calendar') renderCalendarView();
+    else if(viewMode === 'week') renderWeekView();
     else renderTimelineView();
   }
 
@@ -1147,6 +1366,7 @@
       document.getElementById('compactDaysBtn').style.display = 'none';
       document.getElementById('compactNightsBtn').style.display = 'none';
       document.getElementById('viewModeBtn').style.display = 'none';
+      document.getElementById('weekViewBtn').style.display = 'none';
       document.getElementById('fitViewBtn').style.display = 'none';
       document.getElementById('zoomInBtn').style.display = 'none';
       document.getElementById('zoomOutBtn').style.display = 'none';
@@ -1159,6 +1379,7 @@
     document.getElementById('compactDaysBtn').style.display = 'flex';
     document.getElementById('compactNightsBtn').style.display = 'flex';
     document.getElementById('viewModeBtn').style.display = 'flex';
+    document.getElementById('weekViewBtn').style.display = 'flex';
     document.getElementById('fitViewBtn').style.display = 'flex';
     document.getElementById('zoomInBtn').style.display = 'flex';
     document.getElementById('zoomOutBtn').style.display = 'flex';
@@ -1166,9 +1387,15 @@
     var daysBtn = document.getElementById('compactDaysBtn');
     daysBtn.classList.toggle('active', compactEmptyDays);
     daysBtn.title = compactEmptyDays ? 'Réafficher les jours sans événement' : 'Compacter les jours sans événement';
+    daysBtn.querySelector('.label').textContent = compactEmptyDays ? 'Réafficher les jours' : 'Compacter les jours';
     var nightsBtn = document.getElementById('compactNightsBtn');
     nightsBtn.classList.toggle('active', compactNights);
     nightsBtn.title = compactNights ? 'Réafficher les nuits normalement' : 'Compacter les nuits';
+    nightsBtn.querySelector('.label').textContent = compactNights ? 'Réafficher les nuits' : 'Compacter les nuits';
+    var fitBtn = document.getElementById('fitViewBtn');
+    fitBtn.title = 'Réajuster sur toute la durée';
+    fitBtn.querySelector('.label').textContent = 'Réajuster';
+    updateViewToggleLabels();
 
     var orientation = getOrientation();
     container.className = orientation;
@@ -1183,7 +1410,7 @@
     // lanes, stacked below any previously loaded file's lanes
     var groups = {};
     var order = [];
-    allEvents.forEach(function(e){
+    visibleEvents().forEach(function(e){
       var vkey = e.variante || 'A';
       var key = e.fileIndex + '\u0000' + vkey;
       if(!groups[key]){ groups[key] = { fileIndex: e.fileIndex, variante: vkey, events: [] }; order.push(key); }
@@ -1399,6 +1626,23 @@
   var CAL_EMPTY_H = 14;
   var CAL_ROW_PAD = 6;
 
+  // Keeps the "Vue calendrier"/"Vue semaine" menu items honest regardless of
+  // which button was used to get here (switching views from one view mode
+  // directly to another shouldn't leave a stale label on an unrelated button).
+  function updateViewToggleLabels(){
+    var calBtn = document.getElementById('viewModeBtn');
+    var calLabel = calBtn.querySelector('.label');
+    calBtn.title = viewMode === 'calendar' ? 'Basculer en vue timeline' : 'Basculer en vue calendrier';
+    calLabel.textContent = viewMode === 'calendar' ? 'Vue timeline' : 'Vue calendrier';
+    calBtn.classList.toggle('active', viewMode === 'calendar');
+
+    var wkBtn = document.getElementById('weekViewBtn');
+    var wkLabel = wkBtn.querySelector('.label');
+    wkBtn.title = viewMode === 'week' ? 'Basculer en vue timeline' : 'Basculer en vue semaine';
+    wkLabel.textContent = viewMode === 'week' ? 'Vue timeline' : 'Vue semaine';
+    wkBtn.classList.toggle('active', viewMode === 'week');
+  }
+
   function mondayOfUTC(ms){
     var d = new Date(ms);
     var dow = (d.getUTCDay() + 6) % 7; // 0=Monday
@@ -1422,15 +1666,36 @@
 
   function renderCalendarView(){
     var container = document.getElementById('timeline');
+    var empty = document.getElementById('empty');
     container.innerHTML = '';
     container.className = 'calendar';
     container.style.backgroundImage = 'none';
+
+    if(!allEvents.length){
+      empty.style.display = 'flex';
+      document.getElementById('resetBtn').style.display = 'none';
+      document.getElementById('icsBtn').style.display = 'none';
+      document.getElementById('compactDaysBtn').style.display = 'none';
+      document.getElementById('compactNightsBtn').style.display = 'none';
+      document.getElementById('viewModeBtn').style.display = 'none';
+      document.getElementById('weekViewBtn').style.display = 'none';
+      document.getElementById('fitViewBtn').style.display = 'none';
+      document.getElementById('zoomInBtn').style.display = 'none';
+      document.getElementById('zoomOutBtn').style.display = 'none';
+      document.getElementById('rangeControls').style.display = 'none';
+      document.getElementById('cityFilterWrap').style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
 
     document.getElementById('compactDaysBtn').style.display = 'none';
     document.getElementById('compactNightsBtn').style.display = 'none';
     document.getElementById('zoomInBtn').style.display = 'none';
     document.getElementById('zoomOutBtn').style.display = 'none';
-    document.getElementById('fitViewBtn').title = 'Aller à aujourd\'hui';
+    var calFitBtn = document.getElementById('fitViewBtn');
+    calFitBtn.title = 'Aller à aujourd\'hui';
+    calFitBtn.querySelector('.label').textContent = 'Aujourd\'hui';
+    updateViewToggleLabels();
 
     // sticky day-of-week header
     var head = document.createElement('div');
@@ -1457,12 +1722,13 @@
     var cursor = firstWeekStart;
     var guard = 0;
     var runningTop = head.offsetHeight || 26;
+    var visible = visibleEvents();
 
     while(cursor <= lastWeekStart && guard < 3000){
       var weekStart = cursor;
       var weekEnd = weekStart + 7*86400000;
 
-      var weekEvents = allEvents.filter(function(e){
+      var weekEvents = visible.filter(function(e){
         return e.start.getTime() < weekEnd && e.end.getTime() > weekStart;
       }).map(function(e){
         var s = Math.max(e.start.getTime(), weekStart);
@@ -1533,6 +1799,140 @@
     }
 
     updateRangeInputs();
+  }
+
+  // One week, 7 day cells side by side (wide screen) or stacked (narrow
+  // screen) — modeled on the continuous calendar view above but showing a
+  // single week at a time, with each day its own cell (events don't span
+  // across cells) so titles have room to wrap instead of being truncated
+  // to one line.
+  function renderWeekView(){
+    var container = document.getElementById('timeline');
+    var empty = document.getElementById('empty');
+    container.innerHTML = '';
+    container.className = 'week';
+    container.style.backgroundImage = 'none';
+
+    if(!allEvents.length){
+      empty.style.display = 'flex';
+      document.getElementById('resetBtn').style.display = 'none';
+      document.getElementById('icsBtn').style.display = 'none';
+      document.getElementById('compactDaysBtn').style.display = 'none';
+      document.getElementById('compactNightsBtn').style.display = 'none';
+      document.getElementById('viewModeBtn').style.display = 'none';
+      document.getElementById('weekViewBtn').style.display = 'none';
+      document.getElementById('fitViewBtn').style.display = 'none';
+      document.getElementById('zoomInBtn').style.display = 'none';
+      document.getElementById('zoomOutBtn').style.display = 'none';
+      document.getElementById('rangeControls').style.display = 'none';
+      document.getElementById('cityFilterWrap').style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+
+    document.getElementById('compactDaysBtn').style.display = 'none';
+    document.getElementById('compactNightsBtn').style.display = 'none';
+    document.getElementById('zoomInBtn').style.display = 'none';
+    document.getElementById('zoomOutBtn').style.display = 'none';
+    document.getElementById('rangeControls').style.display = 'none';
+    document.getElementById('cityFilterWrap').style.display = 'flex';
+    var wkFitBtn = document.getElementById('fitViewBtn');
+    wkFitBtn.title = 'Aller à aujourd\'hui';
+    wkFitBtn.querySelector('.label').textContent = 'Aujourd\'hui';
+    updateViewToggleLabels();
+
+    var todayMid = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    if(weekViewStart == null) weekViewStart = mondayOfUTC(todayMid);
+    var weekStart = weekViewStart;
+    var weekEnd = weekStart + 7*86400000;
+
+    // nav bar: previous / current range / next
+    var nav = document.createElement('div');
+    nav.className = 'week-nav';
+    var prevBtn = document.createElement('button');
+    prevBtn.title = 'Semaine précédente';
+    prevBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>';
+    prevBtn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      weekViewStart -= 7*86400000;
+      render();
+    });
+    var rangeLabel = document.createElement('span');
+    rangeLabel.className = 'week-range';
+    var startD = new Date(weekStart), endD = new Date(weekEnd - 86400000);
+    var sameMonth = startD.getUTCMonth() === endD.getUTCMonth() && startD.getUTCFullYear() === endD.getUTCFullYear();
+    rangeLabel.textContent = startD.getUTCDate() + ' ' + (sameMonth ? '' : MONTH_LABELS_SHORT[startD.getUTCMonth()] + ' ') +
+      '→ ' + endD.getUTCDate() + ' ' + MONTH_LABELS_SHORT[endD.getUTCMonth()] + ' ' + endD.getUTCFullYear();
+    var nextBtn = document.createElement('button');
+    nextBtn.title = 'Semaine suivante';
+    nextBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+    nextBtn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      weekViewStart += 7*86400000;
+      render();
+    });
+    nav.appendChild(prevBtn);
+    nav.appendChild(rangeLabel);
+    nav.appendChild(nextBtn);
+    container.appendChild(nav);
+
+    var grid = document.createElement('div');
+    grid.className = 'week-grid ' + getOrientation();
+    container.appendChild(grid);
+
+    var visible = visibleEvents();
+    for(var i=0;i<7;i++){
+      var dayStart = weekStart + i*86400000;
+      var dayEnd = dayStart + 86400000;
+      var dayEvents = visible.filter(function(e){
+        return e.start.getTime() < dayEnd && e.end.getTime() > dayStart;
+      }).sort(function(a,b){ return a.start.getTime() - b.start.getTime(); });
+
+      var cell = document.createElement('div');
+      cell.className = 'week-daycell' + (i >= 5 ? ' weekend' : '') + (dayStart === todayMid ? ' today' : '');
+
+      var head = document.createElement('div');
+      head.className = 'week-daycell-head';
+      var dObj = new Date(dayStart);
+      head.textContent = DOW_LABELS[i] + ' ' + dObj.getUTCDate() + ' ' + MONTH_LABELS_SHORT[dObj.getUTCMonth()];
+      cell.appendChild(head);
+
+      var list = document.createElement('div');
+      list.className = 'week-daycell-list';
+      dayEvents.forEach(function(e){
+        var chip = document.createElement('div');
+        chip.className = 'week-chip';
+        var color = fileColors[e.fileIndex] || e.forcedColor || categoryColors[e.category] || '#888';
+        chip.style.background = color;
+        chip.style.color = readableTextColor(color);
+        chip.textContent = e.name;
+        attachTooltip(chip, e);
+        list.appendChild(chip);
+      });
+      cell.appendChild(list);
+      grid.appendChild(cell);
+    }
+
+    // Landscape cells have a fixed height (one screen, no page scroll), so an
+    // overloaded day needs an explicit "+N" rather than silently clipping
+    // mid-chip. Portrait cells grow naturally and the page scrolls instead,
+    // so every title stays fully visible there without needing this pass.
+    if(getOrientation() === 'horizontal'){
+      var lists = grid.querySelectorAll('.week-daycell-list');
+      lists.forEach(function(listEl){
+        if(listEl.scrollHeight <= listEl.clientHeight + 1) return;
+        var more = document.createElement('div');
+        more.className = 'week-more';
+        listEl.appendChild(more);
+        var hidden = 0;
+        while(listEl.children.length > 1 && listEl.scrollHeight > listEl.clientHeight + 1){
+          listEl.removeChild(listEl.children[listEl.children.length - 2]);
+          hidden++;
+          more.textContent = '+' + hidden;
+        }
+        if(hidden === 0) listEl.removeChild(more);
+      });
+    }
   }
 
   function tickLabelFor(ms, step, d){
@@ -1714,6 +2114,7 @@
     var names = loadedFiles.map(function(f){ return f.name; });
     document.title = names.join(' · ') || DEFAULT_TITLE;
     renderHeader();
+    refreshCityFilterOptions();
   }
 
   function renderHeader(){
@@ -1757,7 +2158,10 @@
           persistFiles();
           render();
         });
-        swatch.appendChild(colorInput);
+        var swatchClip = document.createElement('span');
+        swatchClip.className = 'swatch-clip';
+        swatchClip.appendChild(colorInput);
+        swatch.appendChild(swatchClip);
         chip.appendChild(swatch);
 
         var del = document.createElement('button');
@@ -1792,6 +2196,39 @@
     render();
   }
 
+  // ---------- action menu (single hamburger button, bottom-right) ----------
+  function openActionMenu(){
+    document.getElementById('fabPanel').classList.add('open');
+    document.getElementById('menuToggleBtn').classList.add('active');
+  }
+  function closeActionMenu(){
+    document.getElementById('fabPanel').classList.remove('open');
+    document.getElementById('menuToggleBtn').classList.remove('active');
+  }
+  document.getElementById('menuToggleBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    var panel = document.getElementById('fabPanel');
+    if(panel.classList.contains('open')) closeActionMenu(); else openActionMenu();
+  });
+  // Clicking an action closes the menu, except zoom (used repeatedly in a row).
+  // Registered on the capture phase: every action handler below calls
+  // ev.stopPropagation(), which would otherwise block a bubble-phase listener
+  // from ever seeing the click.
+  document.getElementById('fabPanel').addEventListener('click', function(ev){
+    var item = ev.target.closest('.fab-item');
+    if(!item || item.id === 'zoomInBtn' || item.id === 'zoomOutBtn') return;
+    closeActionMenu();
+  }, true);
+  document.addEventListener('click', function(ev){
+    var panel = document.getElementById('fabPanel');
+    if(!panel.classList.contains('open')) return;
+    if(panel.contains(ev.target) || document.getElementById('menuToggleBtn').contains(ev.target)) return;
+    closeActionMenu();
+  }, true);
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Escape') closeActionMenu();
+  });
+
   var fileInput = document.getElementById('fileInput');
   document.getElementById('addBtn').addEventListener('click', function(){ fileInput.click(); });
   document.getElementById('resetBtn').addEventListener('click', function(ev){
@@ -1805,8 +2242,16 @@
     compactNights = false;
     compactEmptyDays = false;
     nightTransitions = null;
+    cityFilter = '';
+    viewMode = 'timeline'; // revient à la vue par défaut pour réafficher la page d'import vide
+    weekViewStart = null;
     clearPersistedFiles();
     updateHeaderAndTitle();
+    render();
+  });
+
+  document.getElementById('cityFilterSelect').addEventListener('change', function(ev){
+    cityFilter = ev.target.value;
     render();
   });
 
@@ -2014,12 +2459,12 @@
   // found in the calendar name or file name (checked in this order; first
   // match wins). Anything else imported as .ics falls back to light gray.
   var ICS_NAME_COLOR_RULES = [
-    { word: 'guen', color: '#2dc653' },   // vert
-    { word: 'tibo', color: '#3a86ff' },   // bleu
-    { word: 'boris', color: '#f77f00' },  // orange
-    { word: 'voyage', color: '#e63946' }  // rouge
+    { word: 'guen', color: '#5ea374' },   // vert sauge
+    { word: 'tibo', color: '#5c80b8' },   // bleu acier
+    { word: 'boris', color: '#c98a4c' },  // ambre
+    { word: 'voyage', color: '#b2555c' }  // brique
   ];
-  var ICS_DEFAULT_COLOR = '#c7cdd6'; // gris clair
+  var ICS_DEFAULT_COLOR = '#bcc3cc'; // gris clair
 
   function icsNameBasedColor(calName, fallbackName){
     var norm = normCategory((calName || '') + ' ' + (fallbackName || ''));
@@ -2032,6 +2477,7 @@
   function icsEventsToEvents(parsed, fileIndex, fallbackName){
     var out = [];
     var calColorHex = parsed.calColor ? resolveCssColorToHex(parsed.calColor) : null;
+    if(calColorHex) calColorHex = softenEmbeddedColor(calColorHex);
     var defaultCategory = parsed.calName || fallbackName || 'Calendrier';
     var nameColor = icsNameBasedColor(parsed.calName, fallbackName);
     parsed.events.forEach(function(ev){
@@ -2058,7 +2504,8 @@
 
       var category = ev.categories || defaultCategory;
       var name = ev.summary || '—';
-      var forcedColor = (ev.color && resolveCssColorToHex(ev.color)) || calColorHex || nameColor;
+      var evColorHex = ev.color && resolveCssColorToHex(ev.color);
+      var forcedColor = (evColorHex && softenEmbeddedColor(evColorHex)) || calColorHex || nameColor;
       var icsDescription = leftoverLines.join('\n').trim();
       var icsUrl = ev.url ? ev.url.trim() : '';
 
@@ -2100,7 +2547,7 @@
   var timelineEl = document.getElementById('timeline');
 
   function applyZoom(factor, clientX, clientY){
-    if(!allEvents.length || viewMode === 'calendar') return;
+    if(!allEvents.length || viewMode === 'calendar' || viewMode === 'week') return;
     var orientation = getOrientation();
     var rect = viewportEl.getBoundingClientRect();
     var cx = clientX !== undefined ? clientX : (rect.left + rect.width/2);
@@ -2149,6 +2596,12 @@
       scrollCalendarToToday();
       return;
     }
+    if(viewMode === 'week'){
+      var todayMid = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+      weekViewStart = mondayOfUTC(todayMid);
+      render();
+      return;
+    }
     zoomLevel = 1;
     render();
     viewportEl.scrollLeft = 0;
@@ -2158,11 +2611,18 @@
   document.getElementById('viewModeBtn').addEventListener('click', function(ev){
     ev.stopPropagation();
     viewMode = viewMode === 'calendar' ? 'timeline' : 'calendar';
-    var btn = document.getElementById('viewModeBtn');
-    btn.title = viewMode === 'calendar' ? 'Basculer en vue timeline' : 'Basculer en vue calendrier';
-    btn.classList.toggle('active', viewMode === 'calendar');
     render();
     if(viewMode === 'calendar') scrollCalendarToToday();
+  });
+
+  document.getElementById('weekViewBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    viewMode = viewMode === 'week' ? 'timeline' : 'week';
+    if(viewMode === 'week'){
+      var todayMid = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+      weekViewStart = mondayOfUTC(todayMid); // toujours la semaine courante à l'ouverture
+    }
+    render();
   });
 
   function scrollCalendarToToday(){
@@ -2283,7 +2743,11 @@
     else { root.removeAttribute('data-theme'); }
     root.style.colorScheme = mode === 'day' ? 'light' : 'dark';
     var btn = document.getElementById('themeBtn');
+    var label = btn.querySelector('.label');
     btn.innerHTML = mode === 'day' ? MOON_ICON : SUN_ICON;
+    if(label) btn.appendChild(label);
+    else { label = document.createElement('span'); label.className = 'label'; btn.appendChild(label); }
+    label.textContent = mode === 'day' ? 'Mode nuit' : 'Mode jour';
     btn.title = mode === 'day' ? 'Passer en mode nuit' : 'Passer en mode jour';
     try{ localStorage.setItem(THEME_KEY, mode); } catch(e){}
   }
