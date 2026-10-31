@@ -1571,6 +1571,8 @@
     if(e.euros && !isEffectivelyZero(e.euros)) lines.push(row('€', e.euros));
     if(e.variante) lines.push(row('Variante :', e.variante, true));
     if(e.liens) lines.push(row('liens', linksHtml(e.liens)));
+    if(e.icsDescription) lines.push(row('description', escapeHtml(e.icsDescription).replace(/\n/g, '<br>')));
+    if(e.icsUrl) lines.push(row('lien', linksHtml(e.icsUrl)));
     if(e.statut) lines.push(row('statut', e.statut));
     var color = fileColors[e.fileIndex] || e.forcedColor || categoryColors[e.category] || '#888';
     var textColor = readableTextColor(color);
@@ -1987,6 +1989,7 @@
         else if(prop === 'LOCATION') cur.location = unescapeICSText(value);
         else if(prop === 'CATEGORIES') cur.categories = unescapeICSText(value);
         else if(prop === 'COLOR') cur.color = value.trim();
+        else if(prop === 'URL') cur.url = unescapeICSText(value);
       } else {
         // VCALENDAR-level properties, seen before the first VEVENT
         if(prop === 'X-WR-CALNAME') calName = unescapeICSText(value);
@@ -2038,6 +2041,7 @@
       if(end < start){ var tmp = start; start = end; end = tmp; }
 
       var reference = '', statut = '', euros = '', variante = '', liens = '', de = '', a = '';
+      var leftoverLines = [];
       if(ev.description){
         ev.description.split('\n').forEach(function(l){
           var m;
@@ -2047,6 +2051,7 @@
           else if((m = l.match(/^Variante\s*:\s*(.*)$/))) variante = m[1].trim();
           else if((m = l.match(/^Liens\s*:\s*(.*)$/))) liens = m[1].trim();
           else if(!de && !a && (m = l.match(/^(.+?)\s*\u2192\s*(.+)$/))){ de = m[1].trim(); a = m[2].trim(); }
+          else if(l.trim()) leftoverLines.push(l);
         });
       }
       if(!a && ev.location) a = ev.location;
@@ -2054,12 +2059,15 @@
       var category = ev.categories || defaultCategory;
       var name = ev.summary || '—';
       var forcedColor = (ev.color && resolveCssColorToHex(ev.color)) || calColorHex || nameColor;
+      var icsDescription = leftoverLines.join('\n').trim();
+      var icsUrl = ev.url ? ev.url.trim() : '';
 
       out.push({
         start: start, end: end, category: category, name: name,
         de: de, a: a, aCoords: null,
         reference: reference, statut: statut, euros: euros, variante: variante,
-        liens: liens, fileIndex: fileIndex, forcedColor: forcedColor
+        liens: liens, fileIndex: fileIndex, forcedColor: forcedColor,
+        icsDescription: icsDescription, icsUrl: icsUrl
       });
     });
     return out;
