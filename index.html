@@ -177,6 +177,16 @@
   .fab-item:hover{ filter:brightness(1.15); }
   .fab-item.active{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
   .fab-item svg{ width:18px; height:18px; flex-shrink:0; stroke:currentColor; fill:none; stroke-width:1.7; }
+  #urlDialog{ display:none; position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; padding:16px; }
+  #urlDialog.open{ display:flex; }
+  #urlDialog .box{ background:var(--chip-bg); color:var(--text); border:1px solid var(--glass-border); border-radius:10px; padding:16px; width:min(520px,100%); font-family:var(--sans); box-shadow:0 10px 40px rgba(0,0,0,0.4); }
+  #urlDialog h3{ margin:0 0 10px; font-size:14px; }
+  #urlDialog input{ width:100%; box-sizing:border-box; padding:8px 10px; border-radius:6px; border:1px solid var(--glass-border); background:transparent; color:var(--text); font-size:13px; }
+  #urlDialog .msg{ min-height:16px; margin:8px 0; font-size:11.5px; color:var(--text-dim); }
+  #urlDialog .msg.err{ color:#e5646e; }
+  #urlDialog .actions{ display:flex; gap:8px; justify-content:flex-end; }
+  #urlDialog button{ padding:6px 12px; border-radius:6px; border:1px solid var(--glass-border); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer; }
+  #urlDialog button.primary{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
   .fab-item .label{ font-size:13px; font-weight:600; }
   #fileInput{ display:none; }
 
@@ -452,6 +462,15 @@
     <div id="emptyHint">CSV ou .ics</div>
   </div>
 
+  <div id="urlDialog">
+    <div class="box">
+      <h3>Charger un CSV ou .ics depuis une adresse web</h3>
+      <input type="url" id="urlInput" placeholder="https://…/fichier.csv" autocomplete="off">
+      <div class="msg" id="urlMsg">Le serveur doit autoriser l'accès depuis un navigateur (CORS) : c'est le cas de GitHub (raw), des Google Sheets publiés en CSV, etc.</div>
+      <div class="actions"><button id="urlCancel">Annuler</button><button class="primary" id="urlOk">Charger</button></div>
+    </div>
+  </div>
+
   <div id="fabPanel">
     <button class="fab-item" id="resetBtn" title="Tout effacer (y compris la sauvegarde locale)" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
@@ -496,6 +515,10 @@
     <button class="fab-item" id="addBtn" title="Ajouter un ou plusieurs CSV / .ics">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       <span class="label">Ajouter des fichiers</span>
+    </button>
+    <button class="fab-item" id="urlBtn" title="Charger un CSV / .ics depuis une adresse web">
+      <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>
+      <span class="label">CSV en ligne (URL)</span>
     </button>
   </div>
   <div id="fab">
@@ -2563,6 +2586,66 @@
       reader.readAsText(file, 'UTF-8');
     });
   }
+
+  // ---------- CSV / ICS en ligne ----------
+  function normalizeRemoteUrl(u){
+    return u.replace(/^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/blob\//, 'https://raw.githubusercontent.com/$1/$2/');
+  }
+
+  function addRemoteFile(rawUrl){
+    var url = normalizeRemoteUrl(rawUrl.trim());
+    var parsedUrl;
+    try{ parsedUrl = new URL(url); } catch(e){ return Promise.reject(new Error('Adresse invalide.')); }
+    if(!/^https?:$/.test(parsedUrl.protocol)) return Promise.reject(new Error('Seules les adresses http(s) sont acceptées.'));
+    return fetch(url).then(function(r){
+      if(!r.ok) throw new Error('Le serveur a répondu ' + r.status + '.');
+      return r.text();
+    }, function(){
+      throw new Error('Téléchargement impossible (réseau ou accès refusé par le serveur : CORS).');
+    }).then(function(content){
+      var seg = decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() || parsedUrl.hostname);
+      var ext = (/\.ics$/i.test(seg) || /^\s*BEGIN:VCALENDAR/i.test(content)) ? 'ics' : 'csv';
+      var baseName = seg.replace(/\.(csv|ics)$/i, '') || parsedUrl.hostname;
+      var idx = fileCounter++;
+      var isDuplicate = loadedFiles.some(function(f){ return f.name.toLowerCase() === baseName.toLowerCase(); });
+      var entry = { index: idx, name: baseName, status: 'pending', duplicate: isDuplicate, ext: ext, rawText: content };
+      loadedFiles.push(entry);
+      var evs = ingestParsedContent(content, ext, idx, baseName);
+      entry.status = evs.length ? 'ok' : 'empty';
+      allEvents = allEvents.concat(evs);
+      updateHeaderAndTitle();
+      assignColors();
+      updateNightGradient();
+      render();
+      persistFiles();
+    });
+  }
+
+  var urlDialog = document.getElementById('urlDialog');
+  var urlInput = document.getElementById('urlInput');
+  var urlMsg = document.getElementById('urlMsg');
+  var URL_HINT = urlMsg.textContent;
+  function closeUrlDialog(){ urlDialog.classList.remove('open'); }
+  function submitUrlDialog(){
+    var v = urlInput.value.trim();
+    if(!v) return;
+    urlMsg.className = 'msg'; urlMsg.textContent = 'Chargement…';
+    addRemoteFile(v).then(function(){ closeUrlDialog(); }, function(err){
+      urlMsg.className = 'msg err'; urlMsg.textContent = err.message;
+    });
+  }
+  document.getElementById('urlBtn').addEventListener('click', function(){
+    urlMsg.className = 'msg'; urlMsg.textContent = URL_HINT;
+    urlDialog.classList.add('open');
+    urlInput.focus();
+  });
+  document.getElementById('urlOk').addEventListener('click', submitUrlDialog);
+  document.getElementById('urlCancel').addEventListener('click', closeUrlDialog);
+  urlInput.addEventListener('keydown', function(ev){
+    if(ev.key === 'Enter') submitUrlDialog();
+    else if(ev.key === 'Escape') closeUrlDialog();
+  });
+  urlDialog.addEventListener('mousedown', function(ev){ if(ev.target === urlDialog) closeUrlDialog(); });
 
   fileInput.addEventListener('change', function(){
     loadFiles(fileInput.files);
