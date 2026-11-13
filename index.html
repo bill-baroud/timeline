@@ -99,7 +99,7 @@
   .file-chip{
     display:flex; align-items:center; gap:2px;
     background:var(--chip-bg); border:1px solid var(--glass-border);
-    border-radius:20px; padding:6px 6px 6px 14px; flex-shrink:0;
+    border-radius:20px; padding:6px 6px 6px 10px; flex-shrink:0;
     font-family:var(--sans); font-size:13px; font-weight:600; color:var(--text);
     white-space:nowrap;
   }
@@ -127,6 +127,14 @@
   .file-chip .del:hover{ background:var(--del-hover-bg); color:var(--del-hover-text); }
   .file-chip .del svg{ width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2.2; }
 
+  .file-chip .chip-grip{ display:inline-flex; align-items:center; width:10px; height:18px; margin-right:6px; opacity:0.4; cursor:grab; touch-action:none; flex-shrink:0; }
+  .file-chip .chip-grip svg{ width:8px; height:14px; fill:currentColor; }
+  .file-chip:hover .chip-grip{ opacity:0.8; }
+  .file-chip{ position:relative; }
+  .file-chip.dragging{ z-index:5; cursor:grabbing; opacity:0.85; box-shadow:0 6px 18px rgba(0,0,0,0.45); user-select:none; }
+  .file-chip.drop-before::before, .file-chip.drop-end::after{ content:''; position:absolute; top:3px; bottom:3px; width:3px; border-radius:2px; background:#8caaff; }
+  .file-chip.drop-before::before{ left:-5px; }
+  .file-chip.drop-end::after{ right:-5px; }
   .file-chip .chip-label{ cursor:pointer; user-select:none; }
   .file-chip .chip-label:hover{ text-decoration:underline; }
   .file-chip.hidden-cal{ opacity:0.55; }
@@ -188,6 +196,10 @@
   #urlDialog button{ padding:6px 12px; border-radius:6px; border:1px solid var(--glass-border); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer; }
   #urlDialog button.primary{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
   .fab-item .label{ font-size:13px; font-weight:600; }
+  .fab-item .chev{ width:14px; height:14px; margin-left:2px; transition:transform .15s ease; }
+  #dataMenuBtn.open .chev{ transform:rotate(180deg); }
+  #dataSub{ display:none; flex-direction:column; gap:8px; align-items:flex-end; padding-right:14px; }
+  #dataSub.open{ display:flex; }
   #fileInput{ display:none; }
 
   /* ---- empty state ---- */
@@ -465,21 +477,13 @@
   <div id="urlDialog">
     <div class="box">
       <h3>Charger un CSV ou .ics depuis une adresse web</h3>
-      <input type="url" id="urlInput" placeholder="https://…/fichier.csv" autocomplete="off">
+      <input type="url" id="urlInput" placeholder="https://…/fichier.csv" autocomplete="off" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vR3gutNcuKYhcFYoJUN0GDsSQqOgvEGn5yG4MYJZJWum9OmrzzkFTjAl3HDOB59I_QU8f4AtY6zmXo7/pub?gid=0&amp;single=true&amp;output=csv">
       <div class="msg" id="urlMsg">Le serveur doit autoriser l'accès depuis un navigateur (CORS) : c'est le cas de GitHub (raw), des Google Sheets publiés en CSV, etc.</div>
       <div class="actions"><button id="urlCancel">Annuler</button><button class="primary" id="urlOk">Charger</button></div>
     </div>
   </div>
 
   <div id="fabPanel">
-    <button class="fab-item" id="resetBtn" title="Tout effacer (y compris la sauvegarde locale)" style="display:none;">
-      <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
-      <span class="label">Tout effacer</span>
-    </button>
-    <button class="fab-item" id="icsBtn" title="Exporter en .ics (Google Calendar, Outlook)" style="display:none;">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 11"/></svg>
-      <span class="label">Exporter .ics</span>
-    </button>
     <button class="fab-item" id="compactDaysBtn" title="Compacter les jours sans événement" style="display:none;">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M9 14h1M14 14h1M9 18h1M14 18h1"/></svg>
       <span class="label">Compacter les jours</span>
@@ -512,6 +516,12 @@
       <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>
       <span class="label">Mode jour</span>
     </button>
+    <button class="fab-item" id="dataMenuBtn" title="Importer, exporter, effacer">
+      <svg viewBox="0 0 24 24"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5"/></svg>
+      <span class="label">Fichiers et données</span>
+      <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div id="dataSub">
     <button class="fab-item" id="addBtn" title="Ajouter un ou plusieurs CSV / .ics">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       <span class="label">Ajouter des fichiers</span>
@@ -520,6 +530,15 @@
       <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>
       <span class="label">CSV en ligne (URL)</span>
     </button>
+    <button class="fab-item" id="icsBtn" title="Exporter en .ics (Google Calendar, Outlook)" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 11"/></svg>
+      <span class="label">Exporter .ics</span>
+    </button>
+    <button class="fab-item" id="resetBtn" title="Tout effacer (y compris la sauvegarde locale)" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
+      <span class="label">Tout effacer</span>
+    </button>
+    </div>
   </div>
   <div id="fab">
     <div class="fab-btn" id="menuToggleBtn" title="Actions">
@@ -1613,7 +1632,7 @@
     });
     order.sort(function(ka, kb){
       var ga = groups[ka], gb = groups[kb];
-      if(ga.fileIndex !== gb.fileIndex) return ga.fileIndex - gb.fileIndex;
+      if(ga.fileIndex !== gb.fileIndex) return fileRank(ga.fileIndex) - fileRank(gb.fileIndex);
       return ga.variante.localeCompare(gb.variante);
     });
 
@@ -2319,6 +2338,13 @@
       var chip = document.createElement('div');
       chip.className = 'file-chip' + (f.status === 'pending' ? ' pending' : '') + (f.status === 'empty' ? ' empty' : '');
 
+      chip.dataset.index = f.index;
+      var grip = document.createElement('span');
+      grip.className = 'chip-grip';
+      grip.title = 'Glisser pour réordonner';
+      grip.innerHTML = '<svg viewBox="0 0 8 14"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></svg>';
+      chip.appendChild(grip);
+
       var label = document.createElement('span');
       label.textContent = f.name;
       chip.appendChild(label);
@@ -2387,6 +2413,80 @@
     });
   }
 
+  function fileRank(index){
+    for(var i = 0; i < loadedFiles.length; i++){ if(loadedFiles[i].index === index) return i; }
+    return 9999 + index;
+  }
+
+  // ---------- réorganisation des calendriers par glisser-déposer ----------
+  (function(){
+    var header = document.getElementById('fileChips');
+    var drag = null;
+    var swallowClick = false;
+
+    function clearMarks(){
+      header.querySelectorAll('.drop-before, .drop-end').forEach(function(c){ c.classList.remove('drop-before', 'drop-end'); });
+    }
+
+    header.addEventListener('pointerdown', function(ev){
+      if(ev.button !== 0) return;
+      var chip = ev.target.closest('.file-chip');
+      if(!chip) return;
+      var onGrip = !!ev.target.closest('.chip-grip');
+      if(!onGrip){
+        if(ev.pointerType === 'touch') return; // au doigt : uniquement par la poignée (le défilement reste possible)
+        if(ev.target.closest('.color-swatch, .del')) return;
+      }
+      drag = { chip: chip, idx: Number(chip.dataset.index), x0: ev.clientX, started: false, before: null };
+    });
+
+    document.addEventListener('pointermove', function(ev){
+      if(!drag) return;
+      var dx = ev.clientX - drag.x0;
+      if(!drag.started){
+        if(Math.abs(dx) < 6) return;
+        drag.started = true;
+        drag.chip.classList.add('dragging');
+      }
+      drag.chip.style.transform = 'translateX(' + dx + 'px)';
+      clearMarks();
+      var others = Array.prototype.filter.call(header.querySelectorAll('.file-chip'), function(c){ return c !== drag.chip; });
+      drag.before = null;
+      for(var i = 0; i < others.length; i++){
+        var r = others[i].getBoundingClientRect();
+        if(r.left + r.width / 2 > ev.clientX){ drag.before = Number(others[i].dataset.index); others[i].classList.add('drop-before'); break; }
+      }
+      if(drag.before === null && others.length) others[others.length - 1].classList.add('drop-end');
+    });
+
+    function endDrag(ev){
+      if(!drag) return;
+      var d = drag;
+      drag = null;
+      if(!d.started) return;
+      swallowClick = true;
+      setTimeout(function(){ swallowClick = false; }, 80);
+      clearMarks();
+      d.chip.classList.remove('dragging');
+      d.chip.style.transform = '';
+      if(ev.type === 'pointercancel') return;
+      var moving = null;
+      loadedFiles = loadedFiles.filter(function(f){ if(f.index === d.idx){ moving = f; return false; } return true; });
+      if(!moving) return;
+      var pos = d.before === null ? -1 : loadedFiles.findIndex(function(f){ return f.index === d.before; });
+      if(pos < 0) loadedFiles.push(moving); else loadedFiles.splice(pos, 0, moving);
+      persistFiles();
+      renderHeader();
+      render();
+    }
+    document.addEventListener('pointerup', endDrag);
+    document.addEventListener('pointercancel', endDrag);
+
+    header.addEventListener('click', function(ev){
+      if(swallowClick){ ev.stopPropagation(); ev.preventDefault(); }
+    }, true);
+  })();
+
   function removeFile(index){
     allEvents = allEvents.filter(function(e){ return e.fileIndex !== index; });
     loadedFiles = loadedFiles.filter(function(f){ return f.index !== index; });
@@ -2410,11 +2510,22 @@
   function openActionMenu(){
     document.getElementById('fabPanel').classList.add('open');
     document.getElementById('menuToggleBtn').classList.add('active');
+    // sans données, le sous-menu (import) est directement déplié
+    setDataSub(document.getElementById('resetBtn').style.display === 'none');
   }
   function closeActionMenu(){
     document.getElementById('fabPanel').classList.remove('open');
     document.getElementById('menuToggleBtn').classList.remove('active');
+    setDataSub(false);
   }
+  function setDataSub(open){
+    document.getElementById('dataSub').classList.toggle('open', open);
+    document.getElementById('dataMenuBtn').classList.toggle('open', open);
+  }
+  document.getElementById('dataMenuBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    setDataSub(!document.getElementById('dataSub').classList.contains('open'));
+  });
   document.getElementById('menuToggleBtn').addEventListener('click', function(ev){
     ev.stopPropagation();
     var panel = document.getElementById('fabPanel');
@@ -2426,7 +2537,7 @@
   // from ever seeing the click.
   document.getElementById('fabPanel').addEventListener('click', function(ev){
     var item = ev.target.closest('.fab-item');
-    if(!item || item.id === 'zoomInBtn' || item.id === 'zoomOutBtn') return;
+    if(!item || item.id === 'zoomInBtn' || item.id === 'zoomOutBtn' || item.id === 'dataMenuBtn') return;
     closeActionMenu();
   }, true);
   document.addEventListener('click', function(ev){
