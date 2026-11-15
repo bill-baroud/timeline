@@ -196,6 +196,20 @@
   #urlDialog button{ padding:6px 12px; border-radius:6px; border:1px solid var(--glass-border); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer; }
   #urlDialog button.primary{ background:#3a4a6b; border-color:rgba(140,170,255,0.5); color:#dfe8ff; }
   .fab-item .label{ font-size:13px; font-weight:600; }
+  #quickBar{ position:fixed; right:72px; bottom:18px; z-index:56; display:flex; gap:8px; align-items:center; }
+  .quick-btn{
+    display:flex; align-items:center; justify-content:center; gap:7px;
+    height:44px; padding:0 14px 0 12px; border-radius:22px;
+    background:var(--fab-bg); border:1px solid var(--glass-border);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    color:var(--text); cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    font-family:var(--sans); appearance:none; -webkit-appearance:none; outline:none; white-space:nowrap;
+  }
+  .quick-btn.icon{ width:44px; padding:0; border-radius:50%; }
+  .quick-btn:hover{ filter:brightness(1.15); }
+  .quick-btn svg{ width:18px; height:18px; flex-shrink:0; stroke:currentColor; fill:none; stroke-width:1.7; }
+  .quick-btn .label{ font-size:13px; font-weight:600; }
+  @media (max-width:520px){ .quick-btn:not(.icon) .label{ display:none; } .quick-btn:not(.icon){ width:44px; padding:0; border-radius:50%; } }
   .fab-item .chev{ width:14px; height:14px; margin-left:2px; transition:transform .15s ease; }
   #dataMenuBtn.open .chev{ transform:rotate(180deg); }
   #dataSub{ display:none; flex-direction:column; gap:8px; align-items:flex-end; padding-right:14px; }
@@ -348,6 +362,12 @@
     transition:transform .12s ease, filter .12s ease, box-shadow .12s ease;
   }
   .cal-event:hover{ transform:translateY(-1px); filter:brightness(1.08); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25), 0 4px 10px rgba(0,0,0,0.35); }
+  /* événement de moins de 24 h : fond pâle sur les jours touchés + liseré plein aux heures réelles */
+  .cal-event.timed{ box-shadow:none; overflow:hidden; }
+  .cal-event.timed:hover{ box-shadow:0 4px 10px rgba(0,0,0,0.35); }
+  .cal-event.timed .cal-event-label{ padding-bottom:4px; color:var(--text); }
+  .cal-event .time-strip{ position:absolute; bottom:0; height:4px; min-width:3px; border-radius:2px; }
+  .week-chip .week-chip-time{ display:block; font-family:var(--mono); font-size:9.5px; font-weight:700; opacity:0.8; letter-spacing:.02em; }
   .cal-event-label{
     position:absolute; inset:0; display:flex; align-items:center;
     padding:0 6px; font-size:10.5px; font-weight:600;
@@ -492,14 +512,6 @@
       <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1110 3.5a6.5 6.5 0 0010 11z"/></svg>
       <span class="label">Compacter les nuits</span>
     </button>
-    <button class="fab-item" id="zoomOutBtn" title="Zoom arrière" style="display:none;">
-      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M7 10h6"/></svg>
-      <span class="label">Zoom arrière</span>
-    </button>
-    <button class="fab-item" id="zoomInBtn" title="Zoom avant" style="display:none;">
-      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M10 7v6M7 10h6"/></svg>
-      <span class="label">Zoom avant</span>
-    </button>
     <button class="fab-item" id="fitViewBtn" title="Réajuster sur toute la durée" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>
       <span class="label">Réajuster</span>
@@ -539,6 +551,18 @@
       <span class="label">Tout effacer</span>
     </button>
     </div>
+  </div>
+  <div id="quickBar">
+    <button class="quick-btn" id="todayBtn" title="Aller à aujourd'hui" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>
+      <span class="label">Aujourd'hui</span>
+    </button>
+    <button class="quick-btn icon" id="zoomOutBtn" title="Zoom arrière" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M7 10h6"/></svg>
+    </button>
+    <button class="quick-btn icon" id="zoomInBtn" title="Zoom avant" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6M10 7v6M7 10h6"/></svg>
+    </button>
   </div>
   <div id="fab">
     <div class="fab-btn" id="menuToggleBtn" title="Actions">
@@ -1565,6 +1589,56 @@
     if(viewMode === 'calendar') renderCalendarView();
     else if(viewMode === 'week') renderWeekView();
     else renderTimelineView();
+    updateQuickControls();
+    if(viewMode === 'timeline') updateEventLabels();
+  }
+
+  // Visibilité des boutons selon la vue : "Aujourd'hui" partout, zoom et
+  // "Réajuster" seulement sur la timeline (zoom sans objet en calendrier/semaine).
+  function updateQuickControls(){
+    var has = allEvents.length > 0;
+    var tl = has && viewMode === 'timeline';
+    document.getElementById('todayBtn').style.display = has ? 'flex' : 'none';
+    document.getElementById('zoomInBtn').style.display = tl ? 'flex' : 'none';
+    document.getElementById('zoomOutBtn').style.display = tl ? 'flex' : 'none';
+    document.getElementById('fitViewBtn').style.display = tl ? 'flex' : 'none';
+  }
+
+  // Heure "murale" actuelle exprimée dans la convention des dates brutes (UTC = heure locale lue telle quelle)
+  function nowRaw(){ return Date.now() - new Date().getTimezoneOffset() * 60000; }
+  function todayRawMidnight(){
+    var d = new Date(nowRaw());
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+
+  // Garde le libellé de chaque événement dans la partie visible de la page
+  // (l'événement peut déborder à gauche/droite ou en haut/bas de l'écran).
+  function updateEventLabels(){
+    var vp = document.getElementById('viewport');
+    var tl = document.getElementById('timeline');
+    if(!vp || !tl || tl.classList.contains('calendar') || tl.classList.contains('week')) return;
+    var horizontal = tl.classList.contains('horizontal');
+    var vr = vp.getBoundingClientRect();
+    var items = [];
+    tl.querySelectorAll('.event').forEach(function(el){
+      var r = el.getBoundingClientRect();
+      var lab = el.querySelector('.event-label');
+      if(lab) items.push({ lab: lab, r: r });
+    });
+    items.forEach(function(it){
+      var r = it.r, st = it.lab.style;
+      if(horizontal){
+        var l = Math.max(0, vr.left - r.left), rr = Math.max(0, r.right - vr.right);
+        var w = r.width;
+        st.left = Math.min(l, w) + 'px'; st.right = Math.min(rr, Math.max(0, w - l)) + 'px';
+        st.top = ''; st.bottom = '';
+      } else {
+        var t = Math.max(0, vr.top - r.top), b = Math.max(0, r.bottom - vr.bottom);
+        var h = r.height;
+        st.top = Math.min(t, h) + 'px'; st.bottom = Math.min(b, Math.max(0, h - t)) + 'px';
+        st.left = ''; st.right = '';
+      }
+    });
   }
 
   function renderTimelineView(){
@@ -1817,7 +1891,7 @@
     }
 
     // now line
-    var now = Date.now();
+    var now = nowRaw();
     if(now >= minStart && now <= maxEnd){
       var npos = posOf(now);
       var nl = document.createElement('div');
@@ -1906,9 +1980,6 @@
     document.getElementById('compactNightsBtn').style.display = 'none';
     document.getElementById('zoomInBtn').style.display = 'none';
     document.getElementById('zoomOutBtn').style.display = 'none';
-    var calFitBtn = document.getElementById('fitViewBtn');
-    calFitBtn.title = 'Aller à aujourd\'hui';
-    calFitBtn.querySelector('.label').textContent = 'Aujourd\'hui';
     updateViewToggleLabels();
 
     // sticky day-of-week header
@@ -1928,7 +1999,7 @@
       if(e.end.getTime() > maxEnd) maxEnd = e.end.getTime();
     });
 
-    var todayMidnight = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    var todayMidnight = todayRawMidnight();
     var firstWeekStart = mondayOfUTC(minStart);
     var lastWeekStart = mondayOfUTC(maxEnd);
 
@@ -1993,6 +2064,11 @@
         el.style.background = color;
         el.style.left = (we._dayStart/7*100) + '%';
         el.style.width = ((we._dayEnd - we._dayStart + 1)/7*100) + '%';
+        var evDur = e.end.getTime() - e.start.getTime();
+        var allDayAligned = (e.start.getTime() % 86400000 === 0) && (e.end.getTime() % 86400000 === 0);
+        var isTimed = evDur < 86400000 && !allDayAligned;
+        var spanStartMs = weekStart + we._dayStart * 86400000;
+        var spanLenMs = (we._dayEnd - we._dayStart + 1) * 86400000;
         el.style.top = (CAL_HEADER_H + we._track*CAL_TRACK_H) + 'px';
         el.style.height = (CAL_TRACK_H - 4) + 'px';
         var label = document.createElement('div');
@@ -2000,6 +2076,21 @@
         label.textContent = e.name;
         label.style.color = readableTextColor(color);
         el.appendChild(label);
+        if(isTimed){
+          el.classList.add('timed');
+          el.style.background = 'color-mix(in srgb, ' + color + ' 30%, transparent)';
+          el.style.border = '1px solid color-mix(in srgb, ' + color + ' 55%, var(--text))';
+          label.style.color = '';
+          var segS = Math.max(e.start.getTime(), spanStartMs);
+          var segE = Math.min(e.end.getTime(), spanStartMs + spanLenMs);
+          var strip = document.createElement('div');
+          strip.className = 'time-strip';
+          strip.style.background = color;
+          strip.style.boxShadow = '0 0 0 1px color-mix(in srgb, ' + color + ' 55%, var(--text))';
+          strip.style.left = ((segS - spanStartMs) / spanLenMs * 100) + '%';
+          strip.style.width = (Math.max(segE - segS, 0) / spanLenMs * 100) + '%';
+          el.appendChild(strip);
+        }
         attachTooltip(el, e);
         weekEl.appendChild(el);
       });
@@ -2020,6 +2111,20 @@
   // single week at a time, with each day its own cell (events don't span
   // across cells) so titles have room to wrap instead of being truncated
   // to one line.
+  function hhmm(ms){
+    var d = new Date(ms);
+    return (d.getUTCHours() < 10 ? '0' : '') + d.getUTCHours() + ':' + (d.getUTCMinutes() < 10 ? '0' : '') + d.getUTCMinutes();
+  }
+  // Horaires de l'événement limités au jour affiché (rien si l'événement couvre tout le jour)
+  function chipTimeText(e, dayStart, dayEnd){
+    var s = e.start.getTime(), en = e.end.getTime();
+    if(s <= dayStart && en >= dayEnd) return '';
+    var startsToday = s >= dayStart, endsToday = en <= dayEnd;
+    if(startsToday && endsToday) return hhmm(s) + '–' + (en === dayEnd ? '24:00' : hhmm(en));
+    if(startsToday) return hhmm(s) + ' →';
+    return '→ ' + hhmm(en);
+  }
+
   function renderWeekView(){
     var container = document.getElementById('timeline');
     var empty = document.getElementById('empty');
@@ -2050,12 +2155,9 @@
     document.getElementById('zoomOutBtn').style.display = 'none';
     document.getElementById('rangeControls').style.display = 'none';
     document.getElementById('cityFilterWrap').style.display = 'flex';
-    var wkFitBtn = document.getElementById('fitViewBtn');
-    wkFitBtn.title = 'Aller à aujourd\'hui';
-    wkFitBtn.querySelector('.label').textContent = 'Aujourd\'hui';
     updateViewToggleLabels();
 
-    var todayMid = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    var todayMid = todayRawMidnight();
     if(weekViewStart == null) weekViewStart = mondayOfUTC(todayMid);
     var weekStart = weekViewStart;
     var weekEnd = weekStart + 7*86400000;
@@ -2119,7 +2221,14 @@
         var color = fileColors[e.fileIndex] || e.forcedColor || categoryColors[e.category] || '#888';
         chip.style.background = color;
         chip.style.color = readableTextColor(color);
-        chip.textContent = e.name;
+        var tt = chipTimeText(e, dayStart, dayEnd);
+        if(tt){
+          var timeEl = document.createElement('span');
+          timeEl.className = 'week-chip-time';
+          timeEl.textContent = tt;
+          chip.appendChild(timeEl);
+        }
+        chip.appendChild(document.createTextNode(e.name));
         attachTooltip(chip, e);
         list.appendChild(chip);
       });
@@ -2537,7 +2646,7 @@
   // from ever seeing the click.
   document.getElementById('fabPanel').addEventListener('click', function(ev){
     var item = ev.target.closest('.fab-item');
-    if(!item || item.id === 'zoomInBtn' || item.id === 'zoomOutBtn' || item.id === 'dataMenuBtn') return;
+    if(!item || item.id === 'dataMenuBtn') return;
     closeActionMenu();
   }, true);
   document.addEventListener('click', function(ev){
@@ -2983,20 +3092,31 @@
   });
   document.getElementById('fitViewBtn').addEventListener('click', function(ev){
     ev.stopPropagation();
-    if(viewMode === 'calendar'){
-      scrollCalendarToToday();
-      return;
-    }
-    if(viewMode === 'week'){
-      var todayMid = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
-      weekViewStart = mondayOfUTC(todayMid);
-      render();
-      return;
-    }
     zoomLevel = 1;
     render();
     viewportEl.scrollLeft = 0;
     viewportEl.scrollTop = 0;
+  });
+
+  document.getElementById('todayBtn').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    if(viewMode === 'calendar'){ scrollCalendarToToday(); return; }
+    if(viewMode === 'week'){
+      weekViewStart = mondayOfUTC(todayRawMidnight());
+      render();
+      return;
+    }
+    // timeline : centre la vue sur l'instant présent (ou l'extrémité la plus proche)
+    var model = computeTimeModel();
+    var t = Math.min(Math.max(nowRaw(), model.minStart), model.maxEnd);
+    var frac = model.posOf(t);
+    if(getOrientation() === 'horizontal'){
+      viewportEl.scrollLeft = frac * timelineEl.offsetWidth - viewportEl.clientWidth / 2;
+    } else {
+      viewportEl.scrollTop = frac * timelineEl.offsetHeight - viewportEl.clientHeight / 2;
+    }
+    updateRangeInputs();
+    updateEventLabels();
   });
 
   document.getElementById('viewModeBtn').addEventListener('click', function(ev){
@@ -3010,14 +3130,14 @@
     ev.stopPropagation();
     viewMode = viewMode === 'week' ? 'timeline' : 'week';
     if(viewMode === 'week'){
-      var todayMid = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+      var todayMid = todayRawMidnight();
       weekViewStart = mondayOfUTC(todayMid); // toujours la semaine courante à l'ouverture
     }
     render();
   });
 
   function scrollCalendarToToday(){
-    var todayMidnight = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    var todayMidnight = todayRawMidnight();
     var wk = calendarWeeks.find(function(w){ return w.weekEnd > todayMidnight; }) || calendarWeeks[calendarWeeks.length-1];
     if(wk) viewportEl.scrollTop = Math.max(0, wk.top - 40);
   }
@@ -3109,6 +3229,12 @@
 
   rangeStartEl.addEventListener('change', applyManualRange);
   rangeEndEl.addEventListener('change', applyManualRange);
+
+  var labelRaf = 0;
+  viewportEl.addEventListener('scroll', function(){
+    if(viewMode !== 'timeline' || labelRaf) return;
+    labelRaf = requestAnimationFrame(function(){ labelRaf = 0; updateEventLabels(); });
+  }, { passive: true });
 
   var scrollUpdateTimer;
   viewportEl.addEventListener('scroll', function(){
